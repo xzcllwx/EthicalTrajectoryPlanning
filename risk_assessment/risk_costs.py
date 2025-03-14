@@ -24,6 +24,10 @@ def calc_risk(
     road_boundary,
     reach_set=None,
     exec_timer=None,
+    start_idx=0,
+    mode_idx=-1,
+    mode_num=1,
+    belief=None
 ):
     """
     Calculate the risk for the given trajectory.
@@ -70,36 +74,62 @@ def calc_risk(
                 traj=traj,
                 predictions=predictions,
                 vehicle_params=vehicle_params,
+                start_idx = start_idx,
+                mode_idx = mode_idx,
+                mode_num = mode_num
             )
 
     ego_harm_traj, obst_harm_traj = get_harm(
-        scenario, traj, predictions, ego_id, vehicle_params, modes, coeffs, timer
+        scenario, traj, predictions, ego_id, vehicle_params, modes, coeffs, timer,
+        start_idx, mode_idx, mode_num
     )
 
     # Calculate risk out of harm and collision probability
-    ego_risk_traj = {}
-    obst_risk_traj = {}
+    # ego_risk_traj = {}
+    # obst_risk_traj = {}
     ego_risk_max = {}
     obst_risk_max = {}
     ego_harm_max = {}
     obst_harm_max = {}
 
     for key in ego_harm_traj:
-        ego_risk_traj[key] = [
-            ego_harm_traj[key][t] * coll_prob_dict[key][t]
-            for t in range(len(ego_harm_traj[key]))
-        ]
-        obst_risk_traj[key] = [
-            obst_harm_traj[key][t] * coll_prob_dict[key][t]
-            for t in range(len(obst_harm_traj[key]))
-        ]
+        ego_risk_traj_list = [[None]] * len(ego_harm_traj[key])
+        obst_risk_traj_list = [[None]] * len(ego_harm_traj[key])
+        # iterate over the modes per obstacle
+        for mode in range(len(ego_harm_traj[key])):
+            ego_risk_traj_list[mode] = [
+                ego_harm_traj[key][mode][t] * coll_prob_dict[key][mode][t]
+                for t in range(len(ego_harm_traj[key][mode]))
+            ]
+            obst_risk_traj_list[mode] = [
+                obst_harm_traj[key][mode][t] * coll_prob_dict[key][mode][t]
+                for t in range(len(obst_harm_traj[key][mode]))
+            ]
+
+        ego_harm_traj_list = ego_harm_traj[key]
+        obst_harm_traj_list = obst_harm_traj[key]
+
+        if mode <0 :
+            belief_idx = 0
+            for mode in range(len(ego_harm_traj[key])):
+                ego_risk_traj_list[mode] = [belief[belief_idx] * num for num in ego_risk_traj_list[mode]]
+                ego_harm_traj_list[mode] = [belief[belief_idx] * num for num in ego_harm_traj_list[mode]]
+                obst_risk_traj_list[mode] = [belief[belief_idx] * num for num in obst_risk_traj_list[mode]]
+                obst_harm_traj_list[mode] = [belief[belief_idx] * num for num in obst_harm_traj_list[mode]]
+                belief_idx += 1
 
         # Take max as representative for the whole trajectory
-        ego_risk_max[key] = max(ego_risk_traj[key])
-        obst_risk_max[key] = max(obst_risk_traj[key])
-        ego_harm_max[key] = max(ego_harm_traj[key])
-        obst_harm_max[key] = max(obst_harm_traj[key])
+        # ego_risk_max[key] = max(ego_risk_traj_list[key])
+        # obst_risk_max[key] = max(obst_risk_traj[key])
+        # ego_harm_max[key] = max(ego_harm_traj[key])
+        # obst_harm_max[key] = max(obst_harm_traj[key])
 
+        ego_risk_max[key] = max(max(row) for row in ego_risk_traj_list)
+        ego_harm_max[key] = max(max(row) for row in ego_harm_traj_list)
+        obst_harm_max[key] = max(max(row) for row in obst_harm_traj_list)
+        obst_risk_max[key] = max(max(row) for row in obst_risk_traj_list)
+
+    # 静态障碍物不需要考虑模态
     # calculate boundary harm
     col_obj = create_collision_object(traj, vehicle_params, ego_state)
 
@@ -226,7 +256,7 @@ def get_ego_costs(ego_risk_max, boundary_harm):
     return sum(ego_risk_max.values()) + boundary_harm
 
 
-def get_responsibility_cost(scenario, traj, ego_state, obst_risk_max, predictions, reach_set, mode="reach_set"):
+def get_responsibility_cost(scenario, traj, ego_state, obst_risk_max, predictions, reach_set, mode="reach_set", mode_idx=-1):
     """Get responsibility cost.
 
     Args:
@@ -245,11 +275,11 @@ def get_responsibility_cost(scenario, traj, ego_state, obst_risk_max, prediction
     else:
         # Assign responsibility to predictions
         predictions = assign_responsibility_by_action_space(
-            scenario, ego_state, predictions
+            scenario, ego_state, predictions, mode_idx
         )
         resp_cost = 0
 
         for key in predictions:
-            resp_cost -= predictions[key]["responsibility"] * obst_risk_max[key]
+            resp_cost -= predictions[key]["responsibility"] * obst_risk_max[key] # 需要确认
 
     return resp_cost, bool_contain_cache

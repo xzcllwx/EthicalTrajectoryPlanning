@@ -31,28 +31,28 @@ class ScenarioEvaluator(ScenarioHandler):
         self.scenario_path = self.path_to_scenarios.joinpath(scenario_path)
         start_time = time.time()
         with self.exec_timer.time_with_cm("total"):
-            try:
-                self._initialize()
-                self._simulate()
-            except GoalReachedNotification as excp:
-                return_dict = {"success": True, "reason_for_failure": None}
-                if "Goal reached but time exceeded!" in str(excp):
-                    return_dict["reached_in_time"] = False
-                elif "Goal reached in time!" in str(excp):
-                    return_dict["reached_in_time"] = True
-            except ExecutionTimeoutError as excp:
-                return_dict = {"success": False, "reason_for_failure": str(excp)}
-            except NotImplementedError as excp:
-                raise excp
-            except Exception as excp:
-                # import traceback
-                # traceback.print_exc()
-                print(f"{scenario_path} >>> {str(excp)}")
-                return_dict = {"success": False, "reason_for_failure": str(excp)}
+            # try:
+            self._initialize()
+            self._simulate()
+            # except GoalReachedNotification as excp:
+            #     return_dict = {"success": True, "reason_for_failure": None}
+            #     if "Goal reached but time exceeded!" in str(excp):
+            #         return_dict["reached_in_time"] = False
+            #     elif "Goal reached in time!" in str(excp):
+            #         return_dict["reached_in_time"] = True
+            # except ExecutionTimeoutError as excp:
+            #     return_dict = {"success": False, "reason_for_failure": str(excp)}
+            # except NotImplementedError as excp:
+            #     raise excp
+            # except Exception as excp:
+            #     # import traceback
+            #     # traceback.print_exc()
+            #     print(f"{scenario_path} >>> {str(excp)}")
+            #     return_dict = {"success": False, "reason_for_failure": str(excp)}
 
-                if "Simulation" in str(excp):
-                    print(f"Stopping Evaluation, results not valid anymore due to simulation time out in {scenario_path}")
-                    sys.exit()
+            #     if "Simulation" in str(excp):
+            #         print(f"Stopping Evaluation, results not valid anymore due to simulation time out in {scenario_path}")
+            #         sys.exit()
 
             # TODO implement saving and animating scenario
             # self.postprocess()

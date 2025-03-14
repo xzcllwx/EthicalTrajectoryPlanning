@@ -54,20 +54,21 @@ def calc_responsibility_reach_set(traj, ego_state, reach_set):
     return responsibility_cost, bool_contain_cache
 
 
-def assign_responsibility_by_action_space(scenario, ego_state, predictions):
+def assign_responsibility_by_action_space(scenario, ego_state, predictions, mode_idx):
     """Assign responsibility to prediction.
 
     Args:
         scenario ([type]): [description]
         ego_state ([type]): [description]
         predictions ([type]): [description]
+        mode_idx ([type]): [description]
 
     Returns:
         [type]: [description]
     """
     for pred_id in predictions:
-
-        if check_if_inside180view(ego_state, predictions[pred_id]):
+        
+        if check_if_inside180view(ego_state, predictions[pred_id], mode_idx):
             predictions[pred_id]['responsibility'] = 0
         else:
             predictions[pred_id]['responsibility'] = 1
@@ -75,10 +76,13 @@ def assign_responsibility_by_action_space(scenario, ego_state, predictions):
     return predictions
 
 
-def check_if_inside180view(ego_state, prediction):
+def check_if_inside180view(ego_state, prediction, mode_idx):
     """Check if predicted vehicle is within the 180 degree view of ego."""
-    dx = prediction['pos_list'][0, 0] - ego_state.position[0]
-    dy = prediction['pos_list'][0, 1] - ego_state.position[1]
+    mode = 0
+    if mode_idx >= 0:
+        mode = mode_idx
+    dx = prediction[mode]['pos_list'][0, 0] - ego_state.position[0]
+    dy = prediction[mode]['pos_list'][0, 1] - ego_state.position[1]
 
     obst_ego_orientation = np.arctan2(dy, dx)
 

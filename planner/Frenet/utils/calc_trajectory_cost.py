@@ -46,7 +46,10 @@ def calc_trajectory_costs(
     sensor_radius: float = 30.0,
     exec_timer=None,
     mode=None,
-    reach_set=None
+    reach_set=None,
+    mode_idx=-1,
+    mode_num=1,
+    belief=None,
 ):
     """
     Calculate the total cost of a frenét trajectory.
@@ -77,7 +80,7 @@ def calc_trajectory_costs(
     timer = ExecTimer(timing_enabled=False) if exec_timer is None else exec_timer
 
     timer.start_timer("simulation/sort trajectories/calculate costs/total")
-
+    # cost 的加权问题
     # read jsons
     weights = params['weights']
     modes = params['modes']
@@ -116,14 +119,17 @@ def calc_trajectory_costs(
             )
 
             ego_cost = get_ego_costs(ego_risk_max=traj.ego_risk_dict, boundary_harm=traj.bd_harm)
-
-            responsibility_cost, bool_contain_cache = get_responsibility_cost(
+            
+            if mode_idx <0 :
+                mode_idx = belief.index(max(belief))
+            responsibility_cost, bool_contain_cache = get_responsibility_cost( # 需要修改
                 scenario=scenario,
                 traj=traj,
                 ego_state=ego_state,
                 obst_risk_max=traj.obst_risk_dict,
                 predictions=predictions,
-                reach_set=reach_set
+                reach_set=reach_set,
+                mode_idx=mode_idx,
             )
 
             # calculate risk cost

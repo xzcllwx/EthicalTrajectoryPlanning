@@ -492,6 +492,10 @@ def sort_frenet_trajectories(
     goal_area,
     exec_timer=None,
     reach_set=None,
+    start_idx=0, 
+    mode_idx=-1,
+    mode_num=1,
+    belief=None
 ):
     """Sort the frenet trajectories. Check validity of all frenet trajectories in fp_list and sort them by increasing cost.
 
@@ -539,6 +543,10 @@ def sort_frenet_trajectories(
                 road_boundary=road_boundary,
                 params=params,
                 exec_timer=timer,
+                start_idx=start_idx, 
+                mode_idx=mode_idx,
+                mode_num=mode_num,
+                belief=belief
             )
 
     for fp in fp_list:
@@ -555,6 +563,9 @@ def sort_frenet_trajectories(
                 road_boundary=road_boundary,
                 collision_checker=collision_checker,
                 exec_timer=timer,
+                start_idx = start_idx, 
+                mode_idx = mode_idx,
+                mode_num = mode_num,
             )
 
             validity_dict[fp.valid_level].append(fp)
@@ -589,7 +600,10 @@ def sort_frenet_trajectories(
             goal_area=goal_area,
             exec_timer=timer,
             mode=mode,
-            reach_set=reach_set
+            reach_set=reach_set,
+            mode_idx=mode_idx,
+            mode_num=mode_num,
+            belief=belief
         )
 
     return ft_list_highest_validity, ft_list_invalid, validity_dict

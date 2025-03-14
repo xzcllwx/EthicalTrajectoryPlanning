@@ -351,6 +351,7 @@ class Planner(object):
                     self.global_path_length,
                 ) = path_planner.plan_global_path()
             # raise error if global path planner fails
+            # belif planning 这里有问题
             except TypeError:
                 raise NoGlobalPathFoundError(
                     "Failed. Could not find a global path for the planning problem."

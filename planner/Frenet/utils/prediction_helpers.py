@@ -136,7 +136,8 @@ def get_orientation_velocity_and_shape_of_prediction(
 
 
 def collision_checker_prediction(
-    predictions: dict, scenario, ego_co, frenet_traj, ego_state
+    predictions: dict, scenario, ego_co, frenet_traj, ego_state,
+    start_idx, mode_idx, mode_num
 ):
     """
     Check predictions for collisions.
@@ -153,36 +154,38 @@ def collision_checker_prediction(
     """
     # check every obstacle in the predictions
     for obstacle_id in list(predictions.keys()):
+        for mode in range(mode_num):
+            if mode_idx >= 0:
+                mode = mode_idx
+            # check if the obstacle is not a rectangle (only shape with attribute length)
+            if not hasattr(scenario.obstacle_by_id(obstacle_id).obstacle_shape, 'length'):
+                raise Warning('Collision Checker can only handle rectangular obstacles.')
+            else:
 
-        # check if the obstacle is not a rectangle (only shape with attribute length)
-        if not hasattr(scenario.obstacle_by_id(obstacle_id).obstacle_shape, 'length'):
-            raise Warning('Collision Checker can only handle rectangular obstacles.')
-        else:
+                # get dimensions of the obstacle
+                length = predictions[obstacle_id]['shape']['length']
+                width = predictions[obstacle_id]['shape']['width']
 
-            # get dimensions of the obstacle
-            length = predictions[obstacle_id]['shape']['length']
-            width = predictions[obstacle_id]['shape']['width']
+                # only check for collision as long as both trajectories (frenét trajectory and prediction) are visible
+                pred_traj = predictions[obstacle_id][mode]['pos_list'][start_idx:]
+                pred_length = min(len(frenet_traj.t), len(pred_traj))
+                if pred_length == 0:
+                    continue
 
-            # only check for collision as long as both trajectories (frenét trajectory and prediction) are visible
-            pred_traj = predictions[obstacle_id]['pos_list']
-            pred_length = min(len(frenet_traj.t), len(pred_traj))
-            if pred_length == 0:
-                continue
+                # get x, y and orientation of the prediction
+                x = pred_traj[:, 0][0:pred_length]
+                y = pred_traj[:, 1][0:pred_length]
+                pred_orientation = predictions[obstacle_id][mode]['orientation_list'][start_idx:]
 
-            # get x, y and orientation of the prediction
-            x = pred_traj[:, 0][0:pred_length]
-            y = pred_traj[:, 1][0:pred_length]
-            pred_orientation = predictions[obstacle_id]['orientation_list']
+                # create a time variant collision object for the predicted ehicle
+                traj = [[x[i], y[i], pred_orientation[i]] for i in range(pred_length)]
 
-            # create a time variant collision object for the predicted ehicle
-            traj = [[x[i], y[i], pred_orientation[i]] for i in range(pred_length)]
-
-            prediction_collision_object_raw = create_tvobstacle(
-                traj_list=traj,
-                box_length=length / 2,
-                box_width=width / 2,
-                start_time_step=ego_state.time_step + 1,
-            )
+                prediction_collision_object_raw = create_tvobstacle(
+                    traj_list=traj,
+                    box_length=length / 2,
+                    box_width=width / 2,
+                    start_time_step=ego_state.time_step + 1,
+                )
 
             # preprocess the collision object
             # if the preprocessing fails, use the raw trajectory
@@ -206,6 +209,9 @@ def collision_checker_prediction(
             # if there is no collision (returns -1) return False, else True
             if collision_at[0] != -1:
                 return True
+            
+            if mode_idx >= 0:
+                break
 
     return False
 

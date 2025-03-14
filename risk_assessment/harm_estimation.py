@@ -197,9 +197,7 @@ def harm_model(
         )
 
     return ego_vehicle.harm, obstacle.harm, ego_vehicle, obstacle
-
-
-def get_harm(scenario, traj, predictions, ego_id, vehicle_params, modes, coeffs, timer):
+def get_harm(scenario, traj, predictions, ego_id, vehicle_params, modes, coeffs, timer, start_idx, mode_idx, mode_num):
     """Get harm.
 
     Args:
@@ -227,113 +225,129 @@ def get_harm(scenario, traj, predictions, ego_id, vehicle_params, modes, coeffs,
     # ego_vehicle_size = vehicle_params.w * vehicle_params.l
 
     for obstacle_id in obstacle_ids:
-        # choose which model should be used to calculate the harm
-        ego_harm_fun, obstacle_harm_fun = get_model(modes, obstacle_id, scenario)
-        # only calculate the risk as long as both obstacles are in the scenario
-        pred_path = predictions[obstacle_id]['pos_list']
-        pred_length = min(len(traj.t) - 1, len(pred_path))
-        if pred_length == 0:
-            continue
+        ego_harm_obst_list = []
+        obst_harm_obst_list = []
+        # iterate over the modes per obstacle
+        for mode in range(mode_num):
+            if mode_idx >= 0:
+                mode = mode_idx
 
-        # get max prediction length
-        # if pred_length > max_pred_length:
-        #     max_pred_length = pred_length
+            # choose which model should be used to calculate the harm
+            ego_harm_fun, obstacle_harm_fun = get_model(modes, obstacle_id, scenario)
+            # only calculate the risk as long as both obstacles are in the scenario
+            pred_path = predictions[obstacle_id][mode]['pos_list'][start_idx:]
+            pred_length = min(len(traj.t) - 1, len(pred_path))
+            if pred_length == 0:
+                continue
 
-        # get the size, the velocity and the orientation of the predicted
-        # vehicle
-        pred_size = (
-            predictions[obstacle_id]['shape']['length']
-            * predictions[obstacle_id]['shape']['width']
-        )
-        pred_v = np.array(predictions[obstacle_id]['v_list'], dtype=np.float)
-        pred_yaw = np.array(predictions[obstacle_id]['orientation_list'], dtype=np.float)
+            # get max prediction length
+            # if pred_length > max_pred_length:
+            #     max_pred_length = pred_length
 
-        # lists to save ego and obstacle harm as well as ego and obstacle risk
-        # one list per obstacle
-        ego_harm_obst = []
-        obst_harm_obst = []
+            # get the size, the velocity and the orientation of the predicted
+            # vehicle
+            pred_size = (
+                predictions[obstacle_id]['shape']['length']
+                * predictions[obstacle_id]['shape']['width']
+            )
+            pred_v = np.array(predictions[obstacle_id][mode]['v_list'][start_idx:], dtype=np.float)
+            pred_yaw = np.array(predictions[obstacle_id][mode]['orientation_list'][start_idx:], dtype=np.float)
 
-        # replace get_obstacle_mass() by get_obstacle_mass()
-        # get the predicted obstacle vehicle mass
-        obstacle_mass = get_obstacle_mass(
-            obstacle_type=scenario.obstacle_by_id(obstacle_id).obstacle_type, size=pred_size
-        )
+            # lists to save ego and obstacle harm as well as ego and obstacle risk
+            # one list per obstacle
+            ego_harm_obst = []
+            obst_harm_obst = []
 
-        # calc crash angle if comprehensive mode selected
-        if modes["crash_angle_simplified"] is False:
+            # replace get_obstacle_mass() by get_obstacle_mass()
+            # get the predicted obstacle vehicle mass
+            obstacle_mass = get_obstacle_mass(
+                obstacle_type=scenario.obstacle_by_id(obstacle_id).obstacle_type, size=pred_size
+            )
+            # obstacle_mass = 3264.8413
 
-            with timer.time_with_cm(
-                "simulation/sort trajectories/calculate costs/calculate risk/"
-                + "calculate harm/calculate PDOF comp"
-            ):
+            # calc crash angle if comprehensive mode selected
+            if modes["crash_angle_simplified"] is False:
 
-                pdof, ego_angle, obs_angle = calc_crash_angle(
-                    traj=traj,
-                    predictions=predictions,
-                    scenario=scenario,
-                    obstacle_id=obstacle_id,
-                    modes=modes,
-                    vehicle_params=vehicle_params,
-                )
-
-            for i in range(pred_length):
                 with timer.time_with_cm(
                     "simulation/sort trajectories/calculate costs/calculate risk/"
-                    + "calculate harm/harm_model"
+                    + "calculate harm/calculate PDOF comp"
                 ):
 
-                    # get the harm ego harm and the harm of the collision opponent
-                    ego_harm, obst_harm, ego_harm_data, obst_harm_data = harm_model(
+                    pdof, ego_angle, obs_angle = calc_crash_angle(
+                        traj=traj,
+                        predictions=predictions,
                         scenario=scenario,
-                        ego_vehicle_id=ego_id,
-                        vehicle_params=vehicle_params,
-                        ego_velocity=traj.v[i],
-                        ego_yaw=traj.yaw[i],
                         obstacle_id=obstacle_id,
-                        obstacle_size=pred_size,
-                        obstacle_velocity=pred_v[i],
-                        obstacle_yaw=pred_yaw[i],
-                        pdof=pdof,
-                        ego_angle=ego_angle,
-                        obs_angle=obs_angle,
                         modes=modes,
-                        coeffs=coeffs,
+                        vehicle_params=vehicle_params,
                     )
 
-                    # store information to calculate harm and harm value in list
-                    ego_harm_obst.append(ego_harm)
-                    obst_harm_obst.append(obst_harm)
-        else:
-            # calc the risk for every time step
-            with timer.time_with_cm(
-                    "simulation/sort trajectories/calculate costs/calculate risk/"
-                    + "calculate harm/calculate PDOF simple"
-            ):
-                # crash angle between ego vehicle and considered obstacle [rad]
-                pdof_array = predictions[obstacle_id]["orientation_list"][:pred_length] - traj.yaw[:pred_length] + np.pi
-                rel_angle_array = np.arctan2(predictions[obstacle_id]["pos_list"][:pred_length, 1] - traj.y[:pred_length],
-                                              predictions[obstacle_id]["pos_list"][:pred_length, 0] - traj.x[:pred_length])
-                # angle of impact area for the ego vehicle
-                ego_angle_array = rel_angle_array - traj.yaw[:pred_length]
-                # angle of impact area for the obstacle
-                obs_angle_array = np.pi + rel_angle_array - predictions[obstacle_id]["orientation_list"][:pred_length]
+                for i in range(pred_length):
+                    with timer.time_with_cm(
+                        "simulation/sort trajectories/calculate costs/calculate risk/"
+                        + "calculate harm/harm_model"
+                    ):
 
-                # calculate the difference between pre-crash and post-crash speed
-                delta_v_array = np.sqrt(
-                    np.power(traj.v[:pred_length], 2)
-                    + np.power(pred_v[:pred_length], 2)
-                    + 2 * traj.v[:pred_length] * pred_v[:pred_length] * np.cos(pdof_array)
-                )
-                ego_delta_v = obstacle_mass / (vehicle_params.m + obstacle_mass) * delta_v_array
-                obstacle_delta_v = vehicle_params.m / (vehicle_params.m + obstacle_mass) * delta_v_array
+                        # get the harm ego harm and the harm of the collision opponent
+                        ego_harm, obst_harm, ego_harm_data, obst_harm_data = harm_model(
+                            scenario=scenario,
+                            ego_vehicle_id=ego_id,
+                            vehicle_params=vehicle_params,
+                            ego_velocity=traj.v[i],
+                            ego_yaw=traj.yaw[i],
+                            obstacle_id=obstacle_id,
+                            obstacle_size=pred_size,
+                            obstacle_velocity=pred_v[i],
+                            obstacle_yaw=pred_yaw[i],
+                            pdof=pdof,
+                            ego_angle=ego_angle,
+                            obs_angle=obs_angle,
+                            modes=modes,
+                            coeffs=coeffs,
+                        )
 
-                # calculate harm besed on selected model
-                ego_harm_obst = ego_harm_fun(velocity=ego_delta_v, angle=ego_angle_array, coeff=coeffs)
-                obst_harm_obst = obstacle_harm_fun(velocity=obstacle_delta_v, angle=obs_angle_array, coeff=coeffs)
-        # store harm list for the obstacles in dictionary for current frenét
-        # trajectory
-        ego_harm_traj[obstacle_id] = ego_harm_obst
-        obst_harm_traj[obstacle_id] = obst_harm_obst
+                        # store information to calculate harm and harm value in list
+                        ego_harm_obst.append(ego_harm)
+                        obst_harm_obst.append(obst_harm)
+            else:
+                # calc the risk for every time step
+                with timer.time_with_cm(
+                        "simulation/sort trajectories/calculate costs/calculate risk/"
+                        + "calculate harm/calculate PDOF simple"
+                ):
+                    # crash angle between ego vehicle and considered obstacle [rad]
+                    pdof_array = predictions[obstacle_id][mode]["orientation_list"][start_idx:pred_length + start_idx] - traj.yaw[:pred_length] + np.pi # 可能没那么长
+                    rel_angle_array = np.arctan2(predictions[obstacle_id][mode]["pos_list"][start_idx:pred_length + start_idx, 1] - traj.y[:pred_length],
+                                                predictions[obstacle_id][mode]["pos_list"][start_idx:pred_length + start_idx, 0] - traj.x[:pred_length])
+                    # angle of impact area for the ego vehicle
+                    ego_angle_array = rel_angle_array - traj.yaw[:pred_length]
+                    # angle of impact area for the obstacle
+                    obs_angle_array = np.pi + rel_angle_array - predictions[obstacle_id][mode]["orientation_list"][start_idx:pred_length + start_idx]
+
+                    # calculate the difference between pre-crash and post-crash speed
+                    delta_v_array = np.sqrt(
+                        np.power(traj.v[:pred_length], 2)
+                        + np.power(pred_v[:pred_length], 2)
+                        + 2 * traj.v[:pred_length] * pred_v[:pred_length] * np.cos(pdof_array)
+                    )
+                    ego_delta_v = obstacle_mass / (vehicle_params.m + obstacle_mass) * delta_v_array
+                    obstacle_delta_v = vehicle_params.m / (vehicle_params.m + obstacle_mass) * delta_v_array
+
+                    # calculate harm besed on selected model
+                    ego_harm_obst = ego_harm_fun(velocity=ego_delta_v, angle=ego_angle_array, coeff=coeffs)
+                    obst_harm_obst = obstacle_harm_fun(velocity=obstacle_delta_v, angle=obs_angle_array, coeff=coeffs)
+            # store harm list for the obstacles in dictionary for current frenét
+            # trajectory
+            # ego_harm_traj[obstacle_id] = ego_harm_obst
+            # obst_harm_traj[obstacle_id] = obst_harm_obst
+            ego_harm_obst_list.append(ego_harm_obst)
+            obst_harm_obst_list.append(obst_harm_obst)
+
+            if mode_idx >= 0:
+                break
+
+        ego_harm_traj[obstacle_id] = ego_harm_obst_list
+        obst_harm_traj[obstacle_id] = obst_harm_obst_list
 
     return ego_harm_traj, obst_harm_traj
 

@@ -122,8 +122,7 @@ def distance(pos1: np.array, pos2: np.array):
     Returns:
         float: Distance between point 1 and point 2.
     """
-    return np.linalg.norm(pos1 - pos2)
-
+    return np.sqrt(np.sum((pos1 - pos2)**2))
 
 def get_max_curvature(vehicle_params, v: float = 0.0):
     """

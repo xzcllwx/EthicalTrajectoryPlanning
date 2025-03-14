@@ -85,6 +85,7 @@ class FrenetPlanner(Planner):
         mode,
         exec_timer=None,
         frenet_parameters: dict = None,
+        contingency_parameters: dict = None,
         sensor_radius: float = 50.0,
         plot_frenet_trajectories: bool = False,
         weights=None,
@@ -106,6 +107,8 @@ class FrenetPlanner(Planner):
             weights(dict): the weights of the costfunction. Defaults to None.
         """
         super().__init__(scenario, planning_problem, ego_id, vehicle_params, exec_timer)
+        self.exec_time = []
+        self.branch_w_rec = []
 
         # Set up logger
         self.logger = FrenetLogging(
@@ -131,6 +134,10 @@ class FrenetPlanner(Planner):
 
                 # parameters for frenet planner
                 self.frenet_parameters = frenet_parameters
+
+               
+                self.contingency_parameters = contingency_parameters
+
                 # vehicle parameters
                 self.p = vehicle_params
 
@@ -200,7 +207,7 @@ class FrenetPlanner(Planner):
                     self.predictor = None
                 else:
                     raise ValueError("mode must be ground_truth, WaleNet, or risk")
-
+                # 不考虑伦理
                 # check whether reachable sets have to be calculated for responsibility
                 if (
                     'responsibility' in self.params_weights
@@ -412,13 +419,14 @@ class FrenetPlanner(Planner):
                 )
 
                 # Assign responsibility to predictions
-                predictions = assign_responsibility_by_action_space(
-                    self.scenario, self.ego_state, predictions
-                )
+                # predictions = assign_responsibility_by_action_space(
+                #     self.scenario, self.ego_state, predictions
+                # )
 
             else:
                 # TODO: Get GT prediction here for responsibility
                 predictions = None
+            # predictions[target_id]/['pos_list'][40×2]/['cov_list'][40×2×2]/['v_list'][40×1]/['orientation_list(rad)'][40×1]
 
         # calculate reachable sets
         if self.responsibility:
@@ -426,6 +434,21 @@ class FrenetPlanner(Planner):
                 "simulation/calculate and check reachable sets"
             ):
                 self.reach_set.calc_reach_sets(self.ego_state, list(predictions.keys()))
+
+        # add mode_idx dim
+        new_predictions = {}
+        mode_num = 1
+        branch_w = [1/mode_num for _ in range(mode_num)]
+        for pred_id in predictions:
+            new_predictions[pred_id] = {}
+            new_predictions[pred_id][0] = {}
+            for key in predictions[pred_id]:
+                if key == 'shape':
+                    new_predictions[pred_id][key] = predictions[pred_id][key]
+                else:
+                    new_predictions[pred_id][0][key] = predictions[pred_id][key]
+        predictions = new_predictions
+
 
         with self.exec_timer.time_with_cm("simulation/sort trajectories/total"):
             # sorted list (increasing costs)
@@ -447,35 +470,144 @@ class FrenetPlanner(Planner):
                 collision_checker=self.collision_checker,
                 goal_area=self.goal_area,
                 exec_timer=self.exec_timer,
-                reach_set=(self.reach_set if self.responsibility else None)
+                reach_set=(self.reach_set if self.responsibility else None),
+                start_idx=0,
+                mode_idx=-1,
+                mode_num=mode_num,
+                belief=branch_w
             )
 
             with self.exec_timer.time_with_cm(
                 "simulation/sort trajectories/sort list by costs"
             ):
                 # Sort the list of frenet trajectories (minimum cost first):
-                ft_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
+                # ft_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
 
             # show details of the frenet trajectories
             # from planner.Frenet.utils.visualization import show_frenet_details
             # show_frenet_details(vehicle_params=self.p, fp_list=ft_list)
+
+                t_min = 3.0
+                t_max = 3.0
+            # max_v = min(
+            #     current_v + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
+            # )
+            # min_v = max(0.01, current_v - max_acceleration * t_min)
+
+            # with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
+                d_list = self.frenet_parameters["d_list"]
+                t_list = self.frenet_parameters["t_list"]
+
+                ft_final_list = []
+                ft_all_plans_list = []
+
+                for plan in ft_list_valid:
+                    final_plan = {}
+                    ft_all_plans = {}
+                    
+                    max_v = min(
+                        plan.v[-1] + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
+                    )
+                    min_v = max(0.01, plan.v[-1] - max_acceleration * t_min)
+
+                    # with self.exec_timer.time_with_cm("simulation/get v list"):
+                    v_list = get_v_list(
+                        v_min=min_v,
+                        v_max=max_v,
+                        v_cur=current_v,
+                        v_goal_min=self.v_goal_min,
+                        v_goal_max=self.v_goal_max,
+                        mode=self.frenet_parameters["v_list_generation_mode"],
+                        n_samples=self.frenet_parameters["n_v_samples"],
+                    )
+
+                    final_plan['shared_plan'] = plan
+                    ft_all_plans['shared_plan'] = plan
+
+                    ft_contingent_list = calc_frenet_trajectories(
+                        c_s=plan.s[-1],
+                        c_s_d=plan.s_d[-1],
+                        c_s_dd=plan.s_dd[-1],
+                        c_d=plan.d[-1],
+                        c_d_d=plan.d_d[-1],
+                        c_d_dd=plan.d_dd[-1],
+                        d_list=d_list,
+                        t_list=t_list,
+                        v_list=v_list,
+                        dt=self.frenet_parameters["dt"],
+                        csp=self.reference_spline,
+                        v_thr=self.frenet_parameters["v_thr"],
+                        exec_timer=self.exec_timer,
+                    )
+
+                    for index in range(len(ft_contingent_list)):
+                        ft_all_plans[index] = ft_contingent_list[index]
+                    
+                    ft_all_plans_list.append(ft_all_plans)
+                    for mode_idx in range(mode_num): # 注意预测模态轴
+                        ft_list_valid, ft_list_invalid, validity_dict = sort_frenet_trajectories(
+                            ego_state=self.ego_state,
+                            fp_list=ft_contingent_list,
+                            global_path=self.global_path,
+                            predictions=predictions,
+                            mode=self.mode,
+                            params=self.params_dict,
+                            planning_problem=self.planning_problem,
+                            scenario=self.scenario,
+                            vehicle_params=self.p,
+                            ego_id=self.ego_id,
+                            dt=self.frenet_parameters["dt"],
+                            sensor_radius=self.sensor_radius,
+                            road_boundary=self.road_boundary,
+                            collision_checker=self.collision_checker,
+                            goal_area=self.goal_area,
+                            exec_timer=self.exec_timer,
+                            reach_set=(self.reach_set if self.responsibility else None),
+                            start_idx=int(max(self.frenet_parameters["t_list"]) / self.frenet_parameters["dt"]),
+                            mode_idx=mode_idx,
+                            mode_num=mode_num,
+                            belief=branch_w
+                        )
+                        # 注意连接处的曲率检测
+                        # 多线程提速实现
+                        # Sort the list of contingent trajectories (minimum cost first):
+                        if len(ft_list_valid) == 0:
+                            continue
+                        ft_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
+                        final_plan[mode_idx] = ft_list_valid[0]
+                        # 如果没有有效路径，直接返回
+                    if len(final_plan) == 1:
+                        print("Failed. No valid frenét path found")
+                        continue
+                    ft_final_list.append(final_plan)
+
+                for plan in ft_final_list:
+                    if len(plan) == 1:
+                        # This means we have only a single plan along the horizon
+                        plan['cost'] = plan['shared_plan'].cost
+                    else:
+                        plan['cost'] = plan['shared_plan'].cost + sum([branch_w[i] * plan[i].cost for i in range(mode_num)])
+
+                # sort the final plan
+                ft_final_list.sort(key=lambda fp: fp['cost'], reverse=False)
 
             if self.reach_set is not None:
                 log_reach_set = self.reach_set.reach_sets[self.time_step]
             else:
                 log_reach_set = None
 
-        with self.exec_timer.time_with_cm("log trajectories"):
-            self.logger.log_data(
-                self.time_step,
-                self.time_step * self.frenet_parameters["dt"],
-                [d.__dict__ for d in ft_list_valid],
-                [d.__dict__ for d in ft_list_invalid],
-                predictions,
-                0,
-                log_reach_set,
-            )
-
+        # 不需要，可读性很差，保存为图片更为使用
+        # with self.exec_timer.time_with_cm("log trajectories"):
+        #     self.logger.log_data(
+        #         self.time_step,
+        #         self.time_step * self.frenet_parameters["dt"],
+        #         [d.__dict__ for d in ft_list_valid],
+        #         [d.__dict__ for d in ft_list_invalid],
+        #         predictions,
+        #         0,
+        #         log_reach_set,
+        #     ) # 需要修复
+    
         with self.exec_timer.time_with_cm("plot trajectories"):
             if self.params_mode["figures"]["create_figures"] is True:
                 if self.mode == "risk":
@@ -535,18 +667,21 @@ class FrenetPlanner(Planner):
 
                 try:
                     draw_frenet_trajectories(
-                        scenario=self.scenario,
+                        scenario=copy.deepcopy(self.scenario),
                         time_step=self.ego_state.time_step,
                         marked_vehicle=self.ego_id,
                         planning_problem=self.planning_problem,
                         traj=None,
-                        all_traj=ft_list,
                         global_path=self.global_path_to_goal,
                         global_path_after_goal=self.global_path_after_goal,
                         driven_traj=self.driven_traj,
                         animation_area=50.0,
                         predictions=predictions,
                         visible_area=visible_area,
+                        all_traj=ft_all_plans_list,
+                        valid_traj=ft_final_list,
+                        mode_num=mode_num,
+                        show_label=True,
                     )
                 except Exception as e:
                     print(e)
@@ -557,6 +692,7 @@ class FrenetPlanner(Planner):
             else:
                 best_trajectory = ft_list_invalid[0]
                 # raise NoLocalTrajectoryFoundError('Failed. No valid frenét path found')
+                print('Failed. No valid frenét path found')
 
         self.exec_timer.stop_timer("simulation/total")
 
@@ -582,7 +718,7 @@ if __name__ == "__main__":
     from planner.Frenet.plannertools.frenetcreator import FrenetCreator
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", default="recorded/hand-crafted/ZAM_Tjunction-1_486_T-1.xml")
+    parser.add_argument("--scenario", default="recorded/hand-crafted/DEU_Muc-4_2_T-1.xml")
     parser.add_argument("--time", action="store_true")
     args = parser.parse_args()
 

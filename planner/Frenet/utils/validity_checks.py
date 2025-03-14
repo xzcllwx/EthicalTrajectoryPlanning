@@ -39,6 +39,9 @@ def check_validity(
     collision_checker,
     predictions: dict = None,
     exec_timer=None,
+    start_idx = 0, 
+    mode_idx = -1,
+    mode_num = 1,
 ):
     """
     Check the validity of a frenet trajectory.
@@ -99,6 +102,7 @@ def check_validity(
             ego_state,
             collision_checker,
             mode,
+            start_idx, mode_idx, mode_num
         ):
             return 1, "collision"
 
@@ -242,7 +246,7 @@ def boundary_valid(vehicle_params, collision_object, road_boundary):
 
 
 def collision_valid(
-    ft, collision_object, predictions, scenario, ego_state, collision_checker, mode
+    ft, collision_object, predictions, scenario, ego_state, collision_checker, mode, start_idx, mode_idx, mode_num
 ):
     """Check if trajectory is collision free with other predictions.
 
@@ -267,6 +271,9 @@ def collision_valid(
             ego_co=collision_object,
             frenet_traj=ft,
             ego_state=ego_state,
+            start_idx=start_idx, 
+            mode_idx=mode_idx,
+            mode_num=mode_num
         )
         if collision_detected:
             return False

@@ -2,7 +2,7 @@
     "bayes": 33.3,
     "equality": 33.3,
     "maximin": 33.3,
-    "responsibility": 0.5,
+    "responsibility": -1.0,
     "ego": 0.0,
     "risk_cost": 250,
     "visible_area": 0,

@@ -19,7 +19,7 @@ import sys
 import os
 
 # Ignore Matplotlib DeprecationWarning
-warnings.filterwarnings("ignore", category=matplotlib.cbook.mplDeprecation)
+# warnings.filterwarnings("ignore", category=matplotlib.cbook.mplDeprecation)
 
 plt.rcParams["figure.figsize"] = (8, 8)
 
@@ -395,6 +395,7 @@ def draw_frenet_trajectories(
     planning_problem=None,
     traj=None,
     all_traj=None,
+    valid_traj=None,
     predictions: dict = None,
     visible_area=None,
     animation_area: float = 40.0,
@@ -405,6 +406,7 @@ def draw_frenet_trajectories(
     picker=False,
     show_label=False,
     live=True,
+    mode_num=1,
 ):
     """
     Plot all frenét trajectories.
@@ -440,74 +442,110 @@ def draw_frenet_trajectories(
             picker,
             show_label,
         )
-
-    # Draw all possible trajectories with their costs as colors
-    if all_traj is not None:
-
+    '''
+    if valid_traj is not None:
+        # final_plan['shared_plan'] = plan
+        # final_plan[mode_num] = ft_list_valid[0]
+        
+        # for plan in ft_final_list:
+        #     if len(plan) == 1:
+        #         # This means we have only a single plan along the horizon
+        #         plan['cost'] = plan['shared_plan'].cost
+        #     else:
+        #         w = [0.1 for _ in range(len(plan) - 1)]
+        #         mode = len(plan) - 1
+        #         plan['cost'] = plan['shared_plan'].cost + sum([w[i] * plan[i].cost for i in range(mode)])
         # x and y axis description
         ax.set_xlabel("x in m")
         ax.set_ylabel("y in m")
 
         # align ego position to the center
         ax.set_xlim(
-            all_traj[0].x[0] - animation_area, all_traj[0].x[0] + animation_area
+            valid_traj[0]['shared_plan'].x[0] - animation_area, valid_traj[0]['shared_plan'].x[0] + animation_area
         )
         ax.set_ylim(
-            all_traj[0].y[0] - animation_area, all_traj[0].y[0] + animation_area
+            valid_traj[0]['shared_plan'].y[0] - animation_area, valid_traj[0]['shared_plan'].y[0] + animation_area
         )
 
         # mormalize the costs of the trajectories to map colors to them
         norm = matplotlib.colors.Normalize(
-            vmin=min([all_traj[i].cost for i in range(len(all_traj))]),
-            vmax=max([all_traj[i].cost for i in range(len(all_traj))]),
+            vmin=min([valid_traj[i]['cost'] for i in range(len(valid_traj))]),
+            vmax=max([valid_traj[i]['cost'] for i in range(len(valid_traj))]),
             clip=True,
         )
         mapper = cm.ScalarMappable(norm=norm, cmap=green_to_red_colormap())
 
-        # first plot all invalid trajectories
-        for p in all_traj:
-            if p.valid_level < 1:
-                ax.plot(
-                    p.x,
-                    p.y,
-                    alpha=0.4,
-                    color=(0.7, 0.7, 0.7),
-                    zorder=19,
-                    picker=picker,
-                )
-            elif p.valid_level < 10:
-                ax.plot(
-                    p.x,
-                    p.y,
-                    alpha=0.6,
-                    color=(0.3, 0.3, 0.7),
-                    zorder=20,
-                    picker=picker,
-                )
-
-        # then plot all valid trajectories
-        for p in reversed(all_traj):
-            if p.valid_level >= 10:
-                color = mapper.to_rgba(p.cost)
-                ax.plot(p.x, p.y, alpha=1.0, color=color, zorder=20, picker=picker)
-
+        # plot all valid trajectories
+        for p in reversed(valid_traj):
+            if len(p) == 2:
+                # This means we have only a single plan along the horizon
+                ax.plot(p.x, p.y, alpha=0.8, color="red", zorder=22, picker=picker)
+            else:
+                color = mapper.to_rgba(p['cost'])
+                shared_plan = p['shared_plan']
+                ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color=color, zorder=25, picker=picker)
+                for idx in range(mode_num):
+                    ft_contingent = p[idx]
+                    ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color=color, zorder=25, picker=picker)
+    best_traj = valid_traj[0]
     # draw planned trajectory
-    if traj is not None:
-        ax.plot(
-            traj.x,
-            traj.y,
-            alpha=1.0,
-            color="green",
-            zorder=25,
-            lw=3.0,
-            label="Best trajectory",
-            picker=picker,
-        )
-
+    if best_traj is not None:
+        shared_plan = best_traj['shared_plan']
+        ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color="green", zorder=30, lw=3.0, label="Best share trajectory", picker=picker)
+        for idx in range(mode_num):
+            ft_contingent = best_traj[idx]
+            ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color="green", zorder=30, lw=3.0, label="Best contin trajectory", picker=picker)
+        
+    # Draw all possible trajectories with their costs as colors
+    if all_traj is not None:
+        # all_traj['shared_plan'] = plan
+        # all_traj[index] = ft_contingent_list[index]
+        for ft in all_traj:
+            shared_plan = ft['shared_plan']
+            ax.plot(
+                shared_plan.x,
+                shared_plan.y,
+                alpha=0.4,
+                color=(0.4, 0.4, 0.4),
+                zorder=19,
+                picker=picker,
+            )
+            for idx in range(mode_num):
+                ft_contingent = ft[idx]
+                if ft_contingent.valid_level < 10:
+                    ax.plot(
+                        ft_contingent.x,
+                        ft_contingent.y,
+                        alpha=0.4,
+                        color=(0.7, 0.7, 0.7),
+                        zorder=19,
+                        picker=picker,
+                    )
+                else:
+                    ax.plot(
+                        ft_contingent.x,
+                        ft_contingent.y,
+                        alpha=0.6,
+                        color=(0.3, 0.3, 0.7),
+                        zorder=20,
+                        picker=picker,
+                    )
+    
     # draw predictions
     if predictions is not None:
-        draw_uncertain_predictions(predictions, ax)
-
+        draw_uncertain_predictions(predictions, ax, mode_num)
+    '''
+    # Save the figure
+    # Clear the directory before saving new frames
+    save_dir = '/root/xzcllwx_ws/EthicalTrajectoryPlanning/figure/'
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    # for file in os.listdir(save_dir):
+    #     file_path = os.path.join(save_dir, file)
+    #     if os.path.isfile(file_path):
+    #         os.unlink(file_path)
+    
+    plt.savefig(os.path.join(save_dir, f"frame_{time_step}.png"))
     # show the figure until the next one ins ready
     # plt.savefig(str(i).zfill(4) + ".png")
     # i += 1
@@ -670,30 +708,12 @@ def draw_scenario(
     if ax is None:
         ax = plt.subplot()
     ax.cla()
-    # plot the scenario at the current time step
-    draw_object(
-        scenario,
-        draw_params={
-            "time_begin": time_step,
-            "dynamic_obstacle": {
-                "draw_shape": True,
-                "draw_bounding_box": True,
-                "draw_icon": False,
-                "show_label": show_label,
-            },
-        },
-        ax=ax,
-    )
-    ax.set_aspect("equal")
-
-    # draw the planning problem
-    if planning_problem is not None:
-        draw_object(planning_problem, ax=ax)
 
     if marked_vehicle is not None:
+        ego=scenario.obstacle_by_id(marked_vehicle)
         # mark the ego vehicle
         draw_object(
-            obj=scenario.obstacle_by_id(marked_vehicle),
+            obj=ego,
             draw_params={
                 "time_begin": time_step,
                 "facecolor": "g",
@@ -704,6 +724,31 @@ def draw_scenario(
                 },
             },
         )
+        scenario.remove_obstacle(ego)
+    
+    # plot the scenario at the current time step
+    draw_object(
+        scenario,
+        draw_params={
+            "time_begin": time_step,
+            "dynamic_obstacle": {
+                "draw_shape": True,
+                "draw_bounding_box": True,
+                "draw_icon": False,
+                "show_label": show_label,
+                'trajectory':
+                    {
+                        'draw_trajectory':False,
+                    },
+            },
+        },
+        ax=ax,
+    )
+    ax.set_aspect("equal")
+
+    # draw the planning problem
+    if planning_problem is not None:
+        draw_object(planning_problem, ax=ax)
 
     # Draw global path
     if global_path is not None:
