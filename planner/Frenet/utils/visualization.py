@@ -442,19 +442,8 @@ def draw_frenet_trajectories(
             picker,
             show_label,
         )
-    '''
+
     if valid_traj is not None:
-        # final_plan['shared_plan'] = plan
-        # final_plan[mode_num] = ft_list_valid[0]
-        
-        # for plan in ft_final_list:
-        #     if len(plan) == 1:
-        #         # This means we have only a single plan along the horizon
-        #         plan['cost'] = plan['shared_plan'].cost
-        #     else:
-        #         w = [0.1 for _ in range(len(plan) - 1)]
-        #         mode = len(plan) - 1
-        #         plan['cost'] = plan['shared_plan'].cost + sum([w[i] * plan[i].cost for i in range(mode)])
         # x and y axis description
         ax.set_xlabel("x in m")
         ax.set_ylabel("y in m")
@@ -474,29 +463,31 @@ def draw_frenet_trajectories(
             clip=True,
         )
         mapper = cm.ScalarMappable(norm=norm, cmap=green_to_red_colormap())
-
+        print(f"valid_traj: {len(valid_traj)}")
         # plot all valid trajectories
         for p in reversed(valid_traj):
             if len(p) == 2:
                 # This means we have only a single plan along the horizon
-                ax.plot(p.x, p.y, alpha=0.8, color="red", zorder=22, picker=picker)
+                ax.plot(p.x, p.y, alpha=0.8, color="red", zorder=28, picker=picker)
+                print(f"no valid contin trajectory{p.keys()}")
             else:
                 color = mapper.to_rgba(p['cost'])
                 shared_plan = p['shared_plan']
-                ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color=color, zorder=25, picker=picker)
+                ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color=color, zorder=28, picker=picker)
                 for idx in range(mode_num):
                     ft_contingent = p[idx]
-                    ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color=color, zorder=25, picker=picker)
+                    ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color=color, zorder=28, picker=picker)
     best_traj = valid_traj[0]
     # draw planned trajectory
     if best_traj is not None:
         shared_plan = best_traj['shared_plan']
-        ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color="green", zorder=30, lw=3.0, label="Best share trajectory", picker=picker)
+        ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color="green", zorder=32, lw=3.0, label="Best share trajectory", picker=picker)
         for idx in range(mode_num):
             ft_contingent = best_traj[idx]
-            ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color="green", zorder=30, lw=3.0, label="Best contin trajectory", picker=picker)
+            ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color="blue", zorder=32, lw=3.0, label="Best contin trajectory", picker=picker)
         
     # Draw all possible trajectories with their costs as colors
+    print(f"all_traj: {len(all_traj)}")
     if all_traj is not None:
         # all_traj['shared_plan'] = plan
         # all_traj[index] = ft_contingent_list[index]
@@ -507,34 +498,25 @@ def draw_frenet_trajectories(
                 shared_plan.y,
                 alpha=0.4,
                 color=(0.4, 0.4, 0.4),
-                zorder=19,
+                zorder=25,
                 picker=picker,
             )
             for idx in range(mode_num):
                 ft_contingent = ft[idx]
-                if ft_contingent.valid_level < 10:
-                    ax.plot(
-                        ft_contingent.x,
-                        ft_contingent.y,
-                        alpha=0.4,
-                        color=(0.7, 0.7, 0.7),
-                        zorder=19,
-                        picker=picker,
-                    )
-                else:
-                    ax.plot(
-                        ft_contingent.x,
-                        ft_contingent.y,
-                        alpha=0.6,
-                        color=(0.3, 0.3, 0.7),
-                        zorder=20,
-                        picker=picker,
-                    )
+                ax.plot(
+                    ft_contingent.x,
+                    ft_contingent.y,
+                    alpha=0.4,
+                    color=(0.7, 0.7, 0.7),
+                    zorder=25,
+                    picker=picker,
+                )
+
     
     # draw predictions
     if predictions is not None:
         draw_uncertain_predictions(predictions, ax, mode_num)
-    '''
+
     # Save the figure
     # Clear the directory before saving new frames
     save_dir = '/root/xzcllwx_ws/EthicalTrajectoryPlanning/figure/'
@@ -747,8 +729,8 @@ def draw_scenario(
     ax.set_aspect("equal")
 
     # draw the planning problem
-    if planning_problem is not None:
-        draw_object(planning_problem, ax=ax)
+    # if planning_problem is not None:
+    #     draw_object(planning_problem, ax=ax)
 
     # Draw global path
     if global_path is not None:
@@ -773,7 +755,7 @@ def draw_scenario(
         x = [state.position[0] for state in driven_traj]
         y = [state.position[1] for state in driven_traj]
         ax.plot(x, y, color="green", zorder=25, label="Driven trajectory")
-
+    
     # draw visible sensor area
     if visible_area is not None:
         if visible_area.geom_type == "MultiPolygon":
@@ -785,7 +767,7 @@ def draw_scenario(
             for obj in visible_area:
                 if obj.geom_type == "Polygon":
                     ax.fill(*obj.exterior.xy, "g", alpha=0.2, zorder=10)
-
+    
     # get the target time to show it in the title
     if hasattr(planning_problem.goal.state_list[0], "time_step"):
         target_time_string = "Target-time: %.1f s - %.1f s" % (

@@ -328,7 +328,7 @@ class FrenetPlanner(Planner):
         with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
             d_list = self.frenet_parameters["d_list"]
             t_list = self.frenet_parameters["t_list"]
-
+            print(f"t_list: {t_list}")
             # calculate all possible frenét trajectories
             ft_list = calc_frenet_trajectories(
                 c_s=c_s,
@@ -487,8 +487,6 @@ class FrenetPlanner(Planner):
             # from planner.Frenet.utils.visualization import show_frenet_details
             # show_frenet_details(vehicle_params=self.p, fp_list=ft_list)
 
-                t_min = 3.0
-                t_max = 3.0
             # max_v = min(
             #     current_v + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
             # )
@@ -496,7 +494,10 @@ class FrenetPlanner(Planner):
 
             # with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
                 d_list = self.frenet_parameters["d_list"]
-                t_list = self.frenet_parameters["t_list"]
+                t_list = self.frenet_parameters["con_t_list"]
+                print(f"contingency_t_list: {t_list}")
+                t_min = min(t_list)
+                t_max = max(t_list)
 
                 ft_final_list = []
                 ft_all_plans_list = []
@@ -687,12 +688,14 @@ class FrenetPlanner(Planner):
                     print(e)
 
             # best trajectory
-            if len(ft_list_valid) > 0:
-                best_trajectory = ft_list_valid[0]
+            if len(ft_final_list) > 0:
+                print("Success. Valid frenét path found")
+                best_trajectory = ft_final_list[0]['shared_plan']
             else:
                 best_trajectory = ft_list_invalid[0]
                 # raise NoLocalTrajectoryFoundError('Failed. No valid frenét path found')
                 print('Failed. No valid frenét path found')
+                # raise Exception('Failed. No valid frenét path found')   
 
         self.exec_timer.stop_timer("simulation/total")
 
