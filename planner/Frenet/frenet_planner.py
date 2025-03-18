@@ -72,6 +72,8 @@ from EthicalTrajectoryPlanning.risk_assessment.visualization.risk_visualization 
 )
 from EthicalTrajectoryPlanning.risk_assessment.visualization.risk_dashboard import risk_dashboard
 
+from datetime import datetime
+import math
 
 class FrenetPlanner(Planner):
     """Jerk optimal planning in frenet coordinates with quintic polynomials in lateral direction and quartic polynomials in longitudinal direction."""
@@ -108,11 +110,11 @@ class FrenetPlanner(Planner):
         """
         super().__init__(scenario, planning_problem, ego_id, vehicle_params, exec_timer)
         self.exec_time = []
-        self.branch_w_rec = []
 
         # Set up logger
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.logger = FrenetLogging(
-            log_path=f"./planner/Frenet/results/logs/{scenario.benchmark_id}.csv"
+            log_path=f"./planner/Frenet/results/logs/{timestamp}.csv"
         )
 
         try:
@@ -191,22 +193,6 @@ class FrenetPlanner(Planner):
                 # get visualization marker
                 self.plot_frenet_trajectories = plot_frenet_trajectories
 
-                # initialize the prediction network if necessary
-                if self.mode == "WaleNet" or self.mode == "risk":
-
-                    prediction_config_path = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
-                        "configs",
-                        "prediction.json",
-                    )
-                    with open(prediction_config_path, "r") as f:
-                        online_args = json.load(f)
-
-                    self.predictor = WaleNet(scenario=scenario, online_args=online_args, verbose=False)
-                elif self.mode == "ground_truth":
-                    self.predictor = None
-                else:
-                    raise ValueError("mode must be ground_truth, WaleNet, or risk")
                 # 不考虑伦理
                 # check whether reachable sets have to be calculated for responsibility
                 if (
@@ -231,7 +217,7 @@ class FrenetPlanner(Planner):
                     "initialization/initialize road boundary"
                 ):
                     try:
-                        with Timeout(5, "Initializing roud boundary"):
+                        with Timeout(10, "Initializing roud boundary"):
                             (
                                 _,
                                 self.road_boundary,
@@ -241,7 +227,8 @@ class FrenetPlanner(Planner):
                                 axis=2,
                             )
                     except ExecutionTimeoutError:
-                        raise RuntimeError("Road Boundary can not be created")
+                        self.road_boundary = None
+                        # raise RuntimeError("Road Boundary can not be created")
 
                 # create a collision checker
                 # remove the ego vehicle from the scenario
@@ -296,11 +283,13 @@ class FrenetPlanner(Planner):
                 #     print("Replanning global path")
                 #     super().plan_global_path(self.scenario, self.planning_problem, self.p, initial_state=current_state)
 
+        current_s, current_d_square = self.reference_spline.get_min_arc_length([self.ego_state.position[0], self.ego_state.position[1]])
+
         # find position along the reference spline (s, s_d, s_dd, d, d_d, d_dd)
-        c_s = self.trajectory["s_loc_m"][1]
+        c_s = current_s
         c_s_d = self.ego_state.velocity
         c_s_dd = self.ego_state.acceleration
-        c_d = self.trajectory["d_loc_m"][1]
+        c_d = math.sqrt(current_d_square)
         c_d_d = self.trajectory["d_d_loc_mps"][1]
         c_d_dd = self.trajectory["d_dd_loc_mps2"][1]
 
@@ -346,88 +335,6 @@ class FrenetPlanner(Planner):
                 exec_timer=self.exec_timer,
             )
 
-        with self.exec_timer.time_with_cm("simulation/prediction"):
-            # Overwrite later
-            visible_area = None
-
-            # get visible objects if the prediction is used
-            if self.mode == "WaleNet" or self.mode == "risk":
-                # get_visible_objects may fail sometimes due to bad lanelets (e.g. DEU_A9-1_1_T-1 at [-73.94, -53.24])
-                if self.params_mode["sensor_occlusion_model"]:
-                    try:
-                        visible_obstacles, visible_area = get_visible_objects(
-                            scenario=self.scenario,
-                            ego_pos=self.ego_state.position,
-                            time_step=self.time_step,
-                            sensor_radius=self.sensor_radius,
-                        )
-                    except Exception as e:  # TopologicalError or AttributeError:
-                        # if get_visible_objects fails just get every obstacle in the sensor_radius
-                        print(
-                            f"Warning: <{getframeinfo(currentframe()).filename} >>> Line {getframeinfo(currentframe()).lineno}>",
-                            e,
-                        )
-                        visible_obstacles = get_obstacles_in_radius(
-                            scenario=self.scenario,
-                            ego_id=self.ego_id,
-                            ego_state=self.ego_state,
-                            radius=self.sensor_radius,
-                        )
-                else:
-                    visible_obstacles = get_obstacles_in_radius(
-                        scenario=self.scenario,
-                        ego_id=self.ego_id,
-                        ego_state=self.ego_state,
-                        radius=self.sensor_radius,
-                    )
-                # predictions may fail (e.g. SetBasedPrediction DEU_Ffb-1_2_S-1)
-                try:
-                    # get dynamic and static visible obstacles since predictor can not handle static obstacles
-                    (
-                        dyn_visible_obstacles,
-                        stat_visible_obstacles,
-                    ) = get_dyn_and_stat_obstacles(
-                        scenario=self.scenario, obstacle_ids=visible_obstacles
-                    )
-                    # get prediction for dynamic obstacles
-                    predictions = self.predictor.step(
-                        time_step=self.ego_state.time_step,
-                        obstacle_id_list=dyn_visible_obstacles,
-                        scenario=self.scenario,
-                    )
-                    # create and add prediction of static obstacles
-                    predictions = add_static_obstacle_to_prediction(
-                        scenario=self.scenario,
-                        predictions=predictions,
-                        obstacle_id_list=stat_visible_obstacles,
-                        pred_horizon=max(t_list) / self.scenario.dt,
-                    )
-                # if prediction fails use ground truth as prediction
-                except Exception as e:
-                    print(
-                        f"Warning: <{getframeinfo(currentframe()).filename} >>> Line {getframeinfo(currentframe()).lineno}>",
-                        e,
-                    )
-                    predictions = get_ground_truth_prediction(
-                        scenario=self.scenario,
-                        obstacle_ids=visible_obstacles,
-                        time_step=self.ego_state.time_step,
-                    )
-                # add orientation and dimensions of the obstacles to the prediction
-                predictions = get_orientation_velocity_and_shape_of_prediction(
-                    predictions=predictions, scenario=self.scenario
-                )
-
-                # Assign responsibility to predictions
-                # predictions = assign_responsibility_by_action_space(
-                #     self.scenario, self.ego_state, predictions
-                # )
-
-            else:
-                # TODO: Get GT prediction here for responsibility
-                predictions = None
-            # predictions[target_id]/['pos_list'][40×2]/['cov_list'][40×2×2]/['v_list'][40×1]/['orientation_list(rad)'][40×1]
-
         # calculate reachable sets
         if self.responsibility:
             with self.exec_timer.time_with_cm(
@@ -436,19 +343,9 @@ class FrenetPlanner(Planner):
                 self.reach_set.calc_reach_sets(self.ego_state, list(predictions.keys()))
 
         # add mode_idx dim
-        new_predictions = {}
-        mode_num = 1
-        branch_w = [1/mode_num for _ in range(mode_num)]
-        for pred_id in predictions:
-            new_predictions[pred_id] = {}
-            new_predictions[pred_id][0] = {}
-            for key in predictions[pred_id]:
-                if key == 'shape':
-                    new_predictions[pred_id][key] = predictions[pred_id][key]
-                else:
-                    new_predictions[pred_id][0][key] = predictions[pred_id][key]
-        predictions = new_predictions
-
+        predictions = self.prediction
+        mode_num = len(predictions[0]) - 1
+        branch_w = [1.0/mode_num for _ in range(mode_num)]
 
         with self.exec_timer.time_with_cm("simulation/sort trajectories/total"):
             # sorted list (increasing costs)
@@ -655,7 +552,8 @@ class FrenetPlanner(Planner):
                     )
 
             # print some information about the frenet trajectories
-            if self.plot_frenet_trajectories:
+            # if self.plot_frenet_trajectories:
+            if True:
                 matplotlib.use("TKAgg")
                 print(
                     "Time step: {} | Velocity: {:.2f} km/h | Acceleration: {:.2f} m/s2".format(
@@ -678,7 +576,6 @@ class FrenetPlanner(Planner):
                         driven_traj=self.driven_traj,
                         animation_area=50.0,
                         predictions=predictions,
-                        visible_area=visible_area,
                         all_traj=ft_all_plans_list,
                         valid_traj=ft_final_list,
                         mode_num=mode_num,

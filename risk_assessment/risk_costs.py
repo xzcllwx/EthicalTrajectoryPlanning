@@ -130,25 +130,28 @@ def calc_risk(
         obst_risk_max[key] = max(max(row) for row in obst_risk_traj_list)
 
     # 静态障碍物不需要考虑模态
-    # calculate boundary harm
-    col_obj = create_collision_object(traj, vehicle_params, ego_state)
+    if road_boundary is not None:
+        # calculate boundary harm
+        col_obj = create_collision_object(traj, vehicle_params, ego_state)
 
-    leaving_road_at = trajectory_queries.trajectories_collision_static_obstacles(
-        trajectories=[col_obj],
-        static_obstacles=road_boundary,
-        method="grid",
-        num_cells=32,
-        auto_orientation=True,
-    )
-
-    if leaving_road_at[0] != -1:
-        coll_time_step = leaving_road_at[0] - ego_state.time_step
-        coll_vel = traj.v[coll_time_step]
-
-        boundary_harm = get_protected_inj_prob_log_reg_ignore_angle(
-            velocity=coll_vel, coeff=coeffs
+        leaving_road_at = trajectory_queries.trajectories_collision_static_obstacles(
+            trajectories=[col_obj],
+            static_obstacles=road_boundary,
+            method="grid",
+            num_cells=32,
+            auto_orientation=True,
         )
 
+        if leaving_road_at[0] != -1:
+            coll_time_step = leaving_road_at[0] - ego_state.time_step
+            coll_vel = traj.v[coll_time_step]
+
+            boundary_harm = get_protected_inj_prob_log_reg_ignore_angle(
+                velocity=coll_vel, coeff=coeffs
+            )
+
+        else:
+            boundary_harm = 0
     else:
         boundary_harm = 0
 

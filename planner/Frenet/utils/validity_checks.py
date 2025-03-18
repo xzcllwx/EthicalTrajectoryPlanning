@@ -112,7 +112,7 @@ def check_validity(
         # check road boundaries
         # if ft.bd_harm is calculated, use it for boundary check
         if predictions is None:
-            if not boundary_valid(vehicle_params, collision_object, road_boundary):
+            if road_boundary is not None and not boundary_valid(vehicle_params, collision_object, road_boundary):
                 return 2, "boundaries"
         else:
             if ft.bd_harm:
@@ -257,7 +257,7 @@ def collision_valid(
     Returns:
         [type]: [description]
     """
-    if mode == "ground_truth":
+    if mode == "ground_truth" and collision_checker is not None:
         collision_detected = collision_checker.collide(collision_object)
         if collision_detected:
             return False
