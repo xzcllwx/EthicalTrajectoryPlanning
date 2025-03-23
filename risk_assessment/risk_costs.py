@@ -85,31 +85,30 @@ def calc_risk(
     )
 
     # Calculate risk out of harm and collision probability
-    # ego_risk_traj = {}
-    # obst_risk_traj = {}
+
     ego_risk_max = {}
     obst_risk_max = {}
     ego_harm_max = {}
     obst_harm_max = {}
 
     for key in ego_harm_traj:
-        ego_risk_traj_list = [[None]] * len(ego_harm_traj[key])
-        obst_risk_traj_list = [[None]] * len(ego_harm_traj[key])
-        # iterate over the modes per obstacle
-        for mode in range(len(ego_harm_traj[key])):
-            ego_risk_traj_list[mode] = [
-                ego_harm_traj[key][mode][t] * coll_prob_dict[key][mode][t]
-                for t in range(len(ego_harm_traj[key][mode]))
-            ]
-            obst_risk_traj_list[mode] = [
-                obst_harm_traj[key][mode][t] * coll_prob_dict[key][mode][t]
-                for t in range(len(obst_harm_traj[key][mode]))
-            ]
+        if mode_idx < 0:
+            ego_risk_traj_list = [[None]] * len(ego_harm_traj[key])
+            obst_risk_traj_list = [[None]] * len(ego_harm_traj[key])
+            # iterate over the modes per obstacle
+            for mode in range(len(ego_harm_traj[key])):
+                ego_risk_traj_list[mode] = [
+                    ego_harm_traj[key][mode][t] * coll_prob_dict[key][mode][t]
+                    for t in range(len(ego_harm_traj[key][mode]))
+                ]
+                obst_risk_traj_list[mode] = [
+                    obst_harm_traj[key][mode][t] * coll_prob_dict[key][mode][t]
+                    for t in range(len(obst_harm_traj[key][mode]))
+                ]
 
-        ego_harm_traj_list = ego_harm_traj[key]
-        obst_harm_traj_list = obst_harm_traj[key]
+            ego_harm_traj_list = ego_harm_traj[key]
+            obst_harm_traj_list = obst_harm_traj[key]
 
-        if mode <0 :
             belief_idx = 0
             for mode in range(len(ego_harm_traj[key])):
                 ego_risk_traj_list[mode] = [belief[belief_idx] * num for num in ego_risk_traj_list[mode]]
@@ -118,16 +117,28 @@ def calc_risk(
                 obst_harm_traj_list[mode] = [belief[belief_idx] * num for num in obst_harm_traj_list[mode]]
                 belief_idx += 1
 
-        # Take max as representative for the whole trajectory
-        # ego_risk_max[key] = max(ego_risk_traj_list[key])
-        # obst_risk_max[key] = max(obst_risk_traj[key])
-        # ego_harm_max[key] = max(ego_harm_traj[key])
-        # obst_harm_max[key] = max(obst_harm_traj[key])
-
-        ego_risk_max[key] = max(max(row) for row in ego_risk_traj_list)
-        ego_harm_max[key] = max(max(row) for row in ego_harm_traj_list)
-        obst_harm_max[key] = max(max(row) for row in obst_harm_traj_list)
-        obst_risk_max[key] = max(max(row) for row in obst_risk_traj_list)
+            # Take max as representative for the whole trajectory
+            ego_risk_max[key] = max(max(row) for row in ego_risk_traj_list)
+            ego_harm_max[key] = max(max(row) for row in ego_harm_traj_list)
+            obst_harm_max[key] = max(max(row) for row in obst_harm_traj_list)
+            obst_risk_max[key] = max(max(row) for row in obst_risk_traj_list)
+        else:
+            ego_risk_traj = {}
+            obst_risk_traj = {}
+            ego_risk_traj[key] = [
+                ego_harm_traj[key][mode_idx][t] * coll_prob_dict[key][mode_idx][t]
+                    for t in range(len(ego_harm_traj[key][mode_idx]))
+            ]
+            obst_risk_traj[key] = [
+                obst_harm_traj[key][mode_idx][t] * coll_prob_dict[key][mode_idx][t]
+                for t in range(len(obst_harm_traj[key][mode_idx]))
+            ]
+            # 可以加上时间系数，作为约束而言，加上时间系数不太合适
+            # Take max as representative for the whole trajectory
+            ego_risk_max[key] = max(ego_risk_traj[key])
+            obst_risk_max[key] = max(obst_risk_traj[key])
+            ego_harm_max[key] = max(ego_harm_traj[key][mode_idx])
+            obst_harm_max[key] = max(obst_harm_traj[key][mode_idx])
 
     # 静态障碍物不需要考虑模态
     if road_boundary is not None:

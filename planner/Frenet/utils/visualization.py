@@ -407,6 +407,7 @@ def draw_frenet_trajectories(
     show_label=False,
     live=True,
     mode_num=1,
+    is_contingency=False,
 ):
     """
     Plot all frenét trajectories.
@@ -466,25 +467,29 @@ def draw_frenet_trajectories(
         print(f"valid_traj: {len(valid_traj)}")
         # plot all valid trajectories
         for p in reversed(valid_traj):
+            color = mapper.to_rgba(p['cost'])
             if len(p) == 2:
                 # This means we have only a single plan along the horizon
-                ax.plot(p.x, p.y, alpha=0.8, color="red", zorder=28, picker=picker)
-                print(f"no valid contin trajectory{p.keys()}")
-            else:
-                color = mapper.to_rgba(p['cost'])
                 shared_plan = p['shared_plan']
                 ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color=color, zorder=28, picker=picker)
-                for idx in range(mode_num):
-                    ft_contingent = p[idx]
-                    ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color=color, zorder=28, picker=picker)
+                # print(f"no valid contin trajectory{p.keys()}")
+            else:
+                # color = mapper.to_rgba(p['cost'])
+                shared_plan = p['shared_plan']
+                ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color=color, zorder=28, picker=picker)
+                if is_contingency:
+                    for idx in range(mode_num):
+                        ft_contingent = p[idx]
+                        ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color=color, zorder=28, picker=picker)
     best_traj = valid_traj[0]
     # draw planned trajectory
     if best_traj is not None:
         shared_plan = best_traj['shared_plan']
         ax.plot(shared_plan.x, shared_plan.y, alpha=1.0, color="green", zorder=32, lw=3.0, label="Best share trajectory", picker=picker)
-        for idx in range(mode_num):
-            ft_contingent = best_traj[idx]
-            ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color="blue", zorder=32, lw=3.0, label="Best contin trajectory", picker=picker)
+        if is_contingency:
+            for idx in range(mode_num):
+                ft_contingent = best_traj[idx]
+                ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color="blue", zorder=32, lw=3.0, label="Best contin trajectory", picker=picker)
         
     # Draw all possible trajectories with their costs as colors
     print(f"all_traj: {len(all_traj)}")
@@ -501,16 +506,17 @@ def draw_frenet_trajectories(
                 zorder=25,
                 picker=picker,
             )
-            for idx in range(mode_num):
-                ft_contingent = ft[idx]
-                ax.plot(
-                    ft_contingent.x,
-                    ft_contingent.y,
-                    alpha=0.4,
-                    color=(0.7, 0.7, 0.7),
-                    zorder=25,
-                    picker=picker,
-                )
+            if is_contingency:
+                for idx in range(mode_num):
+                    ft_contingent = ft[idx]
+                    ax.plot(
+                        ft_contingent.x,
+                        ft_contingent.y,
+                        alpha=0.4,
+                        color=(0.7, 0.7, 0.7),
+                        zorder=25,
+                        picker=picker,
+                    )
 
     
     # draw predictions

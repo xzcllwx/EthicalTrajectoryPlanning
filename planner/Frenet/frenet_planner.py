@@ -374,9 +374,9 @@ class FrenetPlanner(Planner):
                 belief=branch_w
             )
 
-            with self.exec_timer.time_with_cm(
-                "simulation/sort trajectories/sort list by costs"
-            ):
+            # with self.exec_timer.time_with_cm(
+            #     "simulation/sort trajectories/sort list by costs"
+            # ):
                 # Sort the list of frenet trajectories (minimum cost first):
                 # ft_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
 
@@ -388,8 +388,7 @@ class FrenetPlanner(Planner):
             #     current_v + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
             # )
             # min_v = max(0.01, current_v - max_acceleration * t_min)
-
-            # with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
+            with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
                 d_list = self.frenet_parameters["d_list"]
                 t_list = self.frenet_parameters["con_t_list"]
                 print(f"contingency_t_list: {t_list}")
@@ -402,7 +401,7 @@ class FrenetPlanner(Planner):
                 for plan in ft_list_valid:
                     final_plan = {}
                     ft_all_plans = {}
-                    
+                    current_v = plan.v[-1]
                     max_v = min(
                         plan.v[-1] + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
                     )
@@ -421,60 +420,60 @@ class FrenetPlanner(Planner):
 
                     final_plan['shared_plan'] = plan
                     ft_all_plans['shared_plan'] = plan
-
-                    ft_contingent_list = calc_frenet_trajectories(
-                        c_s=plan.s[-1],
-                        c_s_d=plan.s_d[-1],
-                        c_s_dd=plan.s_dd[-1],
-                        c_d=plan.d[-1],
-                        c_d_d=plan.d_d[-1],
-                        c_d_dd=plan.d_dd[-1],
-                        d_list=d_list,
-                        t_list=t_list,
-                        v_list=v_list,
-                        dt=self.frenet_parameters["dt"],
-                        csp=self.reference_spline,
-                        v_thr=self.frenet_parameters["v_thr"],
-                        exec_timer=self.exec_timer,
-                    )
-
-                    for index in range(len(ft_contingent_list)):
-                        ft_all_plans[index] = ft_contingent_list[index]
-                    
-                    ft_all_plans_list.append(ft_all_plans)
-                    for mode_idx in range(mode_num): # 注意预测模态轴
-                        ft_list_valid, ft_list_invalid, validity_dict = sort_frenet_trajectories(
-                            ego_state=self.ego_state,
-                            fp_list=ft_contingent_list,
-                            global_path=self.global_path,
-                            predictions=predictions,
-                            mode=self.mode,
-                            params=self.params_dict,
-                            planning_problem=self.planning_problem,
-                            scenario=self.scenario,
-                            vehicle_params=self.p,
-                            ego_id=self.ego_id,
+                    if self.frenet_parameters["contingency"]:
+                        ft_contingent_list = calc_frenet_trajectories(
+                            c_s=plan.s[-1],
+                            c_s_d=plan.s_d[-1],
+                            c_s_dd=plan.s_dd[-1],
+                            c_d=plan.d[-1],
+                            c_d_d=plan.d_d[-1],
+                            c_d_dd=plan.d_dd[-1],
+                            d_list=d_list,
+                            t_list=t_list,
+                            v_list=v_list,
                             dt=self.frenet_parameters["dt"],
-                            sensor_radius=self.sensor_radius,
-                            road_boundary=self.road_boundary,
-                            collision_checker=self.collision_checker,
-                            goal_area=self.goal_area,
+                            csp=self.reference_spline,
+                            v_thr=self.frenet_parameters["v_thr"],
                             exec_timer=self.exec_timer,
-                            reach_set=(self.reach_set if self.responsibility else None),
-                            start_idx=int(max(self.frenet_parameters["t_list"]) / self.frenet_parameters["dt"]),
-                            mode_idx=mode_idx,
-                            mode_num=mode_num,
-                            belief=branch_w
                         )
-                        # 注意连接处的曲率检测
-                        # 多线程提速实现
-                        # Sort the list of contingent trajectories (minimum cost first):
-                        if len(ft_list_valid) == 0:
-                            continue
-                        ft_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
-                        final_plan[mode_idx] = ft_list_valid[0]
-                        # 如果没有有效路径，直接返回
-                    if len(final_plan) == 1:
+
+                        for index in range(len(ft_contingent_list)):
+                            ft_all_plans[index] = ft_contingent_list[index]
+                        
+                        ft_all_plans_list.append(ft_all_plans)
+                        for mode_idx in range(mode_num): # 注意预测模态轴
+                            ft_contingent_list_valid, ft_list_invalid, validity_dict = sort_frenet_trajectories(
+                                ego_state=self.ego_state,
+                                fp_list=ft_contingent_list,
+                                global_path=self.global_path,
+                                predictions=predictions,
+                                mode=self.mode,
+                                params=self.params_dict,
+                                planning_problem=self.planning_problem,
+                                scenario=self.scenario,
+                                vehicle_params=self.p,
+                                ego_id=self.ego_id,
+                                dt=self.frenet_parameters["dt"],
+                                sensor_radius=self.sensor_radius,
+                                road_boundary=self.road_boundary,
+                                collision_checker=self.collision_checker,
+                                goal_area=self.goal_area,
+                                exec_timer=self.exec_timer,
+                                reach_set=(self.reach_set if self.responsibility else None),
+                                start_idx=int(max(self.frenet_parameters["t_list"]) / self.frenet_parameters["dt"]),
+                                mode_idx=mode_idx,
+                                mode_num=mode_num,
+                                belief=branch_w
+                            )
+                            # 注意连接处的曲率检测
+                            # 多线程提速实现
+                            # Sort the list of contingent trajectories (minimum cost first):
+                            if len(ft_contingent_list_valid) == 0:
+                                continue
+                            ft_contingent_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
+                            final_plan[mode_idx] = ft_contingent_list_valid[0]
+                            # 如果没有有效路径，直接返回
+                    if len(final_plan) == 1 and self.frenet_parameters["contingency"]:
                         print("Failed. No valid frenét path found")
                         continue
                     ft_final_list.append(final_plan)
@@ -580,6 +579,7 @@ class FrenetPlanner(Planner):
                         valid_traj=ft_final_list,
                         mode_num=mode_num,
                         show_label=True,
+                        is_contingency=self.frenet_parameters["contingency"],
                     )
                 except Exception as e:
                     print(e)
@@ -588,11 +588,15 @@ class FrenetPlanner(Planner):
             if len(ft_final_list) > 0:
                 print("Success. Valid frenét path found")
                 best_trajectory = ft_final_list[0]['shared_plan']
+                if self.frenet_parameters["contingency"]:
+                    best_contingency_plan = ft_final_list[0][0]
+                else:
+                    best_contingency_plan = None
             else:
-                best_trajectory = ft_list_invalid[0]
+                # best_trajectory = ft_list_invalid[0]
                 # raise NoLocalTrajectoryFoundError('Failed. No valid frenét path found')
-                print('Failed. No valid frenét path found')
-                # raise Exception('Failed. No valid frenét path found')   
+                # print('Failed. No valid frenét path found')
+                raise Exception('Failed. No valid frenét path found')   
 
         self.exec_timer.stop_timer("simulation/total")
 
@@ -610,6 +614,27 @@ class FrenetPlanner(Planner):
             "ax_mps2": best_trajectory.s_dd,
             "time_s": best_trajectory.t,
         }
+        
+        # 方法1：使用 np.concatenate
+        
+        if best_contingency_plan is not None:
+            total_length = len(best_trajectory.x) + len(best_contingency_plan.x)
+        else:
+            total_length = len(best_trajectory.x)
+
+        plan = np.zeros((total_length, 4))
+        plan[:len(best_trajectory.x), 0] = best_trajectory.x
+        plan[:len(best_trajectory.y), 1] = best_trajectory.y
+        plan[:len(best_trajectory.v), 2] = best_trajectory.v
+        plan[:len(best_trajectory.yaw), 3] = best_trajectory.yaw
+        
+        if best_contingency_plan is not None:
+            plan[len(best_trajectory.x):, 0] = best_contingency_plan.x
+            plan[len(best_trajectory.y):, 1] = best_contingency_plan.y
+            plan[len(best_trajectory.v):, 2] = best_contingency_plan.v
+            plan[len(best_trajectory.yaw):, 3] = best_contingency_plan.yaw
+        
+        return plan
 
 
 if __name__ == "__main__":

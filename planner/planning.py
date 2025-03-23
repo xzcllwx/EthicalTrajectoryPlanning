@@ -93,6 +93,14 @@ class Planner(object):
             "ax_mps2": np.zeros(self.min_trajectory_length),
             "time_s": np.arange(0, dt * self.min_trajectory_length, dt),
         }
+        
+    def init_global_path(self, ref_path):
+        if self.__reference_spline is None: # 只初始化一次
+            # transform the local path to the global coordinate system
+            # ref_path = np.matmul(ref_path, rot_mat.T)
+            # ref_path = ref_path + translation
+            self.global_path_to_goal = ref_path
+            self.__plan_global_path(ref_path)
 
     def step(
         self,
@@ -100,8 +108,8 @@ class Planner(object):
         current_lanelet_id: int,
         time_step: int,
         ego_state: State,
-        prediction=None,
-        ref_path=None,
+        predictions=None,
+        cov = None,
         v_max=50,
     ):
         """Main Step Function of the Planner
@@ -121,49 +129,52 @@ class Planner(object):
         self.__current_lanelet_id = current_lanelet_id
         self.__time_step = time_step
         self.__ego_state = ego_state
-        
-        rotation = ego_state.orientation
-        translation = np.array([ego_state.position[0], ego_state.position[1]]).reshape(1, 2)
-        rot_mat = np.array(
-            [[np.cos(rotation), -np.sin(rotation)], [np.sin(rotation), np.cos(rotation)]]
-        )
-        
-        self._update_scenario(ego_state, prediction, translation, rot_mat)
+           
+        self._update_scenario(ego_state, predictions)
         self.__prediction = {}
-        if prediction is not None:
-            for i in range(prediction.shape[0]):
-                prediction_obj = prediction[i]
+        dt = 0.1
+        if predictions is not None:
+            for i in range(predictions.shape[0]):
+                prediction_obj = predictions[i]
+                object = self.__scenario.obstacle_by_id(i+1)
+                cov_obj = cov[i]
                 self.__prediction[i] = {}
                 self.__prediction[i][0] = {}
-                self.__prediction[i][0]['pos_list'] = np.array([[p[0], p[1]] for p in prediction_obj]).reshape(-1, 2)
-                self.__prediction[i][0]['v_list'] = [
-                    np.linalg.norm(
-                        np.array([prediction_obj[idx,0] - prediction_obj[idx - 1,0], 
-                                  prediction_obj[idx,1] - prediction_obj[idx - 1,1]])
-                    ) / 0.1 if idx > 0 else 0.0
-                    for idx in range(len(prediction_obj))
-                ]
-                self.__prediction[i][0]['v_list'][0] = self.__prediction[i][0]['v_list'][1]
-                self.__prediction[i][0]['orientation_list'] = [
-                    np.arctan2(p[1] - prediction_obj[idx - 1,1], p[0] - prediction_obj[idx - 1,0])
-                    if idx > 0 else 0.0
-                    for idx, p in enumerate(prediction_obj)
-                ]
+                # self.__prediction[i][0]['pos_list'] = np.array([[p[0], p[1]] for p in prediction_obj]).reshape(-1, 2)
+                self.__prediction[i][0]['pos_list'] = np.transpose(prediction_obj[:2, :], (1, 0)) 
+                self.__prediction[i][0]['orientation_list'] = prediction_obj[2, :].flatten()
+                self.__prediction[i][0]['v_list'] = (np.sqrt(
+                    np.diff(prediction_obj[0, :])**2 + np.diff(prediction_obj[1, :])**2
+                ) / dt).tolist()
+                self.__prediction[i][0]['v_list'].append(self.__prediction[i][0]['v_list'][-1])
+                
+                # self.__prediction[i][0]['v_list'] = [
+                #     np.linalg.norm(
+                #         np.array([prediction_obj[idx,0] - prediction_obj[idx - 1,0], 
+                #                   prediction_obj[idx,1] - prediction_obj[idx - 1,1]])
+                #     ) / 0.1 if idx > 0 else 0.0
+                #     for idx in range(len(prediction_obj))
+                # ]
+                # self.__prediction[i][0]['v_list'][0] = self.__prediction[i][0]['v_list'][1]
+                # self.__prediction[i][0]['orientation_list'] = [
+                #     np.arctan2(p[1] - prediction_obj[idx - 1,1], p[0] - prediction_obj[idx - 1,0])
+                #     if idx > 0 else 0.0
+                #     for idx, p in enumerate(prediction_obj)
+                # ]
 
-                self.__prediction[i][0]['orientation_list'][0] = self.__prediction[i][0]['orientation_list'][1]
-                self.__prediction[i][0]['cov_list'] = np.array(
-                    [[[p[2]*p[2], p[2]*p[3]*p[4]], [p[2]*p[3]*p[4], p[3]*p[3]]] for p in prediction_obj]
-                ).reshape(-1, 2, 2)
+                # self.__prediction[i][0]['orientation_list'][0] = self.__prediction[i][0]['orientation_list'][1]
+
+                self.__prediction[i][0]['cov_list'] = cov_obj
+                # self.__prediction[i][0]['cov_list'] = np.array(
+                #     [[[p[0][0], p[0][1]], [p[1][0], p[1][1]]] for p in cov_obj]
+                # ).reshape(-1, 2, 2)
+                # self.__prediction[i][0]['cov_list'] = np.array(
+                #     [[[p[2]*p[2], p[2]*p[3]*p[4]], [p[2]*p[3]*p[4], p[3]*p[3]]] for p in prediction_obj]
+                # ).reshape(-1, 2, 2)
                 self.__prediction[i]['shape'] = {}
-                self.__prediction[i]['shape']['length'] = 3.2
-                self.__prediction[i]['shape']['width'] = 1.8
+                self.__prediction[i]['shape']['length'] = object.obstacle_shape.length
+                self.__prediction[i]['shape']['width'] = object.obstacle_shape.width
 
-        if self.__reference_spline is None: # 只初始化一次
-            # transform the local path to the global coordinate system
-            ref_path = np.matmul(ref_path, rot_mat.T)
-            ref_path = ref_path + translation
-            self.global_path_to_goal = ref_path
-            self.__plan_global_path(ref_path)
         # TODO: Include maximum allowed speed
         self.__v_max = v_max
 
@@ -171,9 +182,9 @@ class Planner(object):
         # self.__check_goal_reached()
 
         # call the planner-type depending step function to generate a new trajectory
-        self._step_planner()
+        return self._step_planner()
 
-    def _update_scenario(self, ego_state, prediction, translation, rot_mat):
+    def _update_scenario(self, ego_state, prediction):
     
         state_args = dict()
         state_args['position'] = ego_state.position
@@ -181,23 +192,28 @@ class Planner(object):
         state_args['time_step'] = self.__time_step
         current_state = State(**state_args)
         ego = self.__scenario.obstacle_by_id(self.__ego_id)
-        if ego.prediction is None:
-            traj = Trajectory(self.__time_step, [current_state])
-            ego.prediction = TrajectoryPrediction(traj, ego.obstacle_shape)
-            ego.initial_state = current_state
-        else:
-            ego.prediction.trajectory.state_list.append(current_state)
+        if ego is not None:
+            if ego.prediction is None:
+                traj = Trajectory(self.__time_step, [current_state])
+                ego.prediction = TrajectoryPrediction(traj, ego.obstacle_shape)
+                ego.initial_state = current_state
+            else:
+                ego.prediction.trajectory.state_list.append(current_state)
+                length = ego.obstacle_shape.length
+                width = ego.obstacle_shape.width
+                occupied_region = Rectangle(length=length, width=width, center=current_state.position, orientation=current_state.orientation)
+                ego.prediction.occupancy_set.append(Occupancy(current_state.time_step, occupied_region))
             
         N_agent = prediction.shape[0]
         # transform the prediction to the global coordinate system
         for i in range(N_agent):
             prediction_obj = prediction[i]
-            prediction_obj[:, :2] = np.matmul(prediction_obj[:, :2], rot_mat.T)
-            prediction_obj[:, :2] = prediction_obj[:, :2] + translation
+            # prediction_obj[:, :2] = np.matmul(prediction_obj[:, :2], rot_mat.T)
+            # prediction_obj[:, :2] = prediction_obj[:, :2] + translation
 
             state_args = dict()
-            state_args['position'] = prediction_obj[0, :2]
-            state_args['orientation'] = math.atan2(prediction_obj[1, 1] - prediction_obj[0, 1], prediction_obj[1, 0] - prediction_obj[0, 0])
+            state_args['position'] = np.array([prediction_obj[0, 0], prediction_obj[1, 0]])
+            state_args['orientation'] = prediction_obj[2, 0]
             state_args['time_step'] = self.__time_step
             current_state = State(**state_args)
             object = self.__scenario.obstacle_by_id(i+1)
@@ -207,8 +223,11 @@ class Planner(object):
                 object.initial_state = current_state
             else:
                 object.prediction.trajectory.state_list.append(current_state)
-                occupied_region = object.obstacle_shape.rotate_translate_local(
-                    current_state.position, current_state.orientation)
+                length = object.obstacle_shape.length
+                width = object.obstacle_shape.width
+                occupied_region = Rectangle(length=length, width=width, center=current_state.position, orientation=current_state.orientation)
+                # occupied_region = object.obstacle_shape.rotate_translate_local(
+                #     current_state.position, current_state.orientation)
                 object.prediction.occupancy_set.append(Occupancy(current_state.time_step, occupied_region))
                         
     def _step_planner(self):
