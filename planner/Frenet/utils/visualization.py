@@ -521,11 +521,12 @@ def draw_frenet_trajectories(
     
     # draw predictions
     if predictions is not None:
+        pass
         draw_uncertain_predictions(predictions, ax, mode_num)
 
     # Save the figure
     # Clear the directory before saving new frames
-    save_dir = '/root/xzcllwx_ws/EthicalTrajectoryPlanning/figure/'
+    save_dir = '/root/xzcllwx_ws/GameFormer-Planner/risk/'
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     # for file in os.listdir(save_dir):
@@ -533,11 +534,11 @@ def draw_frenet_trajectories(
     #     if os.path.isfile(file_path):
     #         os.unlink(file_path)
     
-    plt.savefig(os.path.join(save_dir, f"frame_{time_step}.png"))
+    plt.savefig(os.path.join(save_dir, f"{time_step}.png"))
     # show the figure until the next one ins ready
     # plt.savefig(str(i).zfill(4) + ".png")
     # i += 1
-    plt.pause(0.0001)
+    # plt.pause(0.0001)
 
 
 def show_frenet_details(vehicle_params, fp_list, global_path: np.ndarray = None):

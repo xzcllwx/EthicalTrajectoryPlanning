@@ -94,6 +94,9 @@ class Planner(object):
             "time_s": np.arange(0, dt * self.min_trajectory_length, dt),
         }
         
+        # belief
+        self.__belief = None
+        
     def init_global_path(self, ref_path):
         if self.__reference_spline is None: # 只初始化一次
             # transform the local path to the global coordinate system
@@ -110,6 +113,7 @@ class Planner(object):
         ego_state: State,
         predictions=None,
         cov = None,
+        belief=None,
         v_max=50,
     ):
         """Main Step Function of the Planner
@@ -129,51 +133,55 @@ class Planner(object):
         self.__current_lanelet_id = current_lanelet_id
         self.__time_step = time_step
         self.__ego_state = ego_state
+        self.__belief = belief
            
-        self._update_scenario(ego_state, predictions)
+        self._update_scenario(ego_state, predictions[:, 0, :, :])
         self.__prediction = {}
         dt = 0.1
         if predictions is not None:
             for i in range(predictions.shape[0]):
-                prediction_obj = predictions[i]
                 object = self.__scenario.obstacle_by_id(i+1)
-                cov_obj = cov[i]
                 self.__prediction[i] = {}
-                self.__prediction[i][0] = {}
-                # self.__prediction[i][0]['pos_list'] = np.array([[p[0], p[1]] for p in prediction_obj]).reshape(-1, 2)
-                self.__prediction[i][0]['pos_list'] = np.transpose(prediction_obj[:2, :], (1, 0)) 
-                self.__prediction[i][0]['orientation_list'] = prediction_obj[2, :].flatten()
-                self.__prediction[i][0]['v_list'] = (np.sqrt(
-                    np.diff(prediction_obj[0, :])**2 + np.diff(prediction_obj[1, :])**2
-                ) / dt).tolist()
-                self.__prediction[i][0]['v_list'].append(self.__prediction[i][0]['v_list'][-1])
-                
-                # self.__prediction[i][0]['v_list'] = [
-                #     np.linalg.norm(
-                #         np.array([prediction_obj[idx,0] - prediction_obj[idx - 1,0], 
-                #                   prediction_obj[idx,1] - prediction_obj[idx - 1,1]])
-                #     ) / 0.1 if idx > 0 else 0.0
-                #     for idx in range(len(prediction_obj))
-                # ]
-                # self.__prediction[i][0]['v_list'][0] = self.__prediction[i][0]['v_list'][1]
-                # self.__prediction[i][0]['orientation_list'] = [
-                #     np.arctan2(p[1] - prediction_obj[idx - 1,1], p[0] - prediction_obj[idx - 1,0])
-                #     if idx > 0 else 0.0
-                #     for idx, p in enumerate(prediction_obj)
-                # ]
-
-                # self.__prediction[i][0]['orientation_list'][0] = self.__prediction[i][0]['orientation_list'][1]
-
-                self.__prediction[i][0]['cov_list'] = cov_obj
-                # self.__prediction[i][0]['cov_list'] = np.array(
-                #     [[[p[0][0], p[0][1]], [p[1][0], p[1][1]]] for p in cov_obj]
-                # ).reshape(-1, 2, 2)
-                # self.__prediction[i][0]['cov_list'] = np.array(
-                #     [[[p[2]*p[2], p[2]*p[3]*p[4]], [p[2]*p[3]*p[4], p[3]*p[3]]] for p in prediction_obj]
-                # ).reshape(-1, 2, 2)
                 self.__prediction[i]['shape'] = {}
                 self.__prediction[i]['shape']['length'] = object.obstacle_shape.length
                 self.__prediction[i]['shape']['width'] = object.obstacle_shape.width
+                for j in range(predictions.shape[1]):
+                    prediction_obj = predictions[i][j]
+                    cov_obj = cov[i][j]
+                    
+                    self.__prediction[i][j] = {}
+                    # self.__prediction[i][0]['pos_list'] = np.array([[p[0], p[1]] for p in prediction_obj]).reshape(-1, 2)
+                    self.__prediction[i][j]['pos_list'] = np.transpose(prediction_obj[:2, :], (1, 0)) 
+                    self.__prediction[i][j]['orientation_list'] = prediction_obj[2, :].flatten()
+                    self.__prediction[i][j]['v_list'] = (np.sqrt(
+                        np.diff(prediction_obj[0, :])**2 + np.diff(prediction_obj[1, :])**2
+                    ) / dt).tolist()
+                    self.__prediction[i][j]['v_list'].append(self.__prediction[i][j]['v_list'][-1])
+                    
+                    # self.__prediction[i][0]['v_list'] = [
+                    #     np.linalg.norm(
+                    #         np.array([prediction_obj[idx,0] - prediction_obj[idx - 1,0], 
+                    #                   prediction_obj[idx,1] - prediction_obj[idx - 1,1]])
+                    #     ) / 0.1 if idx > 0 else 0.0
+                    #     for idx in range(len(prediction_obj))
+                    # ]
+                    # self.__prediction[i][0]['v_list'][0] = self.__prediction[i][0]['v_list'][1]
+                    # self.__prediction[i][0]['orientation_list'] = [
+                    #     np.arctan2(p[1] - prediction_obj[idx - 1,1], p[0] - prediction_obj[idx - 1,0])
+                    #     if idx > 0 else 0.0
+                    #     for idx, p in enumerate(prediction_obj)
+                    # ]
+
+                    # self.__prediction[i][0]['orientation_list'][0] = self.__prediction[i][0]['orientation_list'][1]
+
+                    self.__prediction[i][j]['cov_list'] = cov_obj
+                    # self.__prediction[i][0]['cov_list'] = np.array(
+                    #     [[[p[0][0], p[0][1]], [p[1][0], p[1][1]]] for p in cov_obj]
+                    # ).reshape(-1, 2, 2)
+                    # self.__prediction[i][0]['cov_list'] = np.array(
+                    #     [[[p[2]*p[2], p[2]*p[3]*p[4]], [p[2]*p[3]*p[4], p[3]*p[3]]] for p in prediction_obj]
+                    # ).reshape(-1, 2, 2)
+
 
         # TODO: Include maximum allowed speed
         self.__v_max = v_max
@@ -340,6 +348,11 @@ class Planner(object):
     def current_lanelet_id(self):
         """Current lanelet"""
         return self.__current_lanelet_id
+    
+    @property
+    def belief(self):
+        """Belief"""
+        return self.__belief
 
 
 # TODO move to separate file

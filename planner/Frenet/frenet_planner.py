@@ -27,7 +27,7 @@ from commonroad_helper_functions.sensor_model import get_visible_objects
 from commonroad_helper_functions.exceptions import (
     ExecutionTimeoutError,
 )
-from prediction import WaleNet
+# from prediction import WaleNet
 
 # Custom imports
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -112,10 +112,10 @@ class FrenetPlanner(Planner):
         self.exec_time = []
 
         # Set up logger
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.logger = FrenetLogging(
-            log_path=f"./planner/Frenet/results/logs/{timestamp}.csv"
-        )
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # self.logger = FrenetLogging(
+        #     log_path=f"./planner/Frenet/results/logs/{timestamp}.csv"
+        # )
 
         try:
             with Timeout(10, "Frenet Planner initialization"):
@@ -285,11 +285,18 @@ class FrenetPlanner(Planner):
 
         current_s, current_d_square = self.reference_spline.get_min_arc_length([self.ego_state.position[0], self.ego_state.position[1]])
 
+        ref_point = self.reference_spline.calc_position(current_s)
+        ref_yaw = self.reference_spline.calc_yaw(current_s)
+        ref_vector = np.array([ref_point[0] - self.ego_state.position[0], ref_point[1] - self.ego_state.position[1]])
+        tangent_vector = np.array([math.cos(ref_yaw), math.sin(ref_yaw)])
+        cross_product = np.cross(tangent_vector, ref_vector)
+        current_d = math.sqrt(current_d_square) if cross_product >= 0 else -math.sqrt(current_d_square)
+
         # find position along the reference spline (s, s_d, s_dd, d, d_d, d_dd)
         c_s = current_s
         c_s_d = self.ego_state.velocity
         c_s_dd = self.ego_state.acceleration
-        c_d = math.sqrt(current_d_square)
+        c_d = current_d
         c_d_d = self.trajectory["d_d_loc_mps"][1]
         c_d_dd = self.trajectory["d_dd_loc_mps2"][1]
 
@@ -345,7 +352,7 @@ class FrenetPlanner(Planner):
         # add mode_idx dim
         predictions = self.prediction
         mode_num = len(predictions[0]) - 1
-        branch_w = [1.0/mode_num for _ in range(mode_num)]
+        branch_w = self.belief
 
         with self.exec_timer.time_with_cm("simulation/sort trajectories/total"):
             # sorted list (increasing costs)
