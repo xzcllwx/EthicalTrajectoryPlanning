@@ -74,7 +74,7 @@ def check_validity(
         "simulation/sort trajectories/check validity/check acceleration"
     ):
         # check maximum acceleration:
-        if not velocity_valid(ft, vehicle_params):
+        if not acceleration_valid(ft, vehicle_params):
             return 0, "acceleration"
 
     with timer.time_with_cm(
@@ -176,7 +176,7 @@ def acceleration_valid(ft, vehicle_params):
         [bool]: [True if valid, false else]
     """
     for ai in ft.s_dd:
-        if np.abs(ai) > vehicle_params.longitudinal.a_max:
+        if ai > vehicle_params.longitudinal.a_max or ai < -vehicle_params.longitudinal.d_max:
             return False
     return True
 

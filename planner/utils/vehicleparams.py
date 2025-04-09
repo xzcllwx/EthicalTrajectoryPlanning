@@ -63,14 +63,14 @@ class VehicleParameters:
     def parameterize_bmw_320i(self):
         """Simplified parameter set of vehicle 2 (BMW 320i)."""
         # vehicle body dimensions
-        self.l = 4.508  # vehicle length [m] (with US bumpers)
+        self.l = 5.176  # vehicle length [m] (with US bumpers)
         self.l_f = (
-            3.793293 / 2.595
+            1.42
         )  # length from the center of gravity to the front axle [m]
         self.l_r = (
-            4.667707 / 2.595
+            1.67
         )  # length from the center of gravity to the rear axle [m]
-        self.w = 1.610  # vehicle width [m]
+        self.w = 2.3  # vehicle width [m]
 
         # vehicle mass
         self.m = 1475  # vehicle mass [kg]
@@ -78,17 +78,18 @@ class VehicleParameters:
         # steering constraints
         self.steering.min = -1.066  # minimum steering angle [rad]
         self.steering.max = 1.066  # maximum steering angle [rad]
-        self.steering.v_min = -0.4  # minimum steering velocity [rad/s]
-        self.steering.v_max = 0.4  # maximum steering velocity [rad/s]
+        self.steering.v_min = -0.5  # minimum steering velocity [rad/s]
+        self.steering.v_max = 0.5 # maximum steering velocity [rad/s]
 
         # longitudinal constraints
-        self.longitudinal.v_min = -13.6  # minimum velocity [m/s]
-        self.longitudinal.v_max = 50.8  # maximum velocity [m/s]
+        self.longitudinal.v_min = -1.0  # minimum velocity [m/s]
+        self.longitudinal.v_max = 30.0  # maximum velocity [m/s]
         self.longitudinal.v_switch = 7.319  # switching velocity [m/s]
-        self.longitudinal.a_max = 11.5  # maximum absolute acceleration [m/s^2]
+        self.longitudinal.a_max = 5  # maximum absolute acceleration [m/s^2]
+        self.longitudinal.d_max = 8
 
         # lateral acceleration
-        self.lateral_a_max = 10.0  # maximum lateral acceleartion [m/s^2]
+        self.lateral_a_max = 5.0  # maximum lateral acceleartion [m/s^2]
 
     def parameterize_vw_vanagon(self):
         """Simplified parameter set of vehicle 3 (VW Vanagon)."""
@@ -131,6 +132,7 @@ class LongitudinalParameters:
         self.v_max = None  # maximum velocity [m/s]
         self.v_switch = None  # switching velocity [m/s]
         self.a_max = None  # maximum absolute acceleration [m/s^2]
+        self.d_max = None
 
 
 class SteeringParameters:

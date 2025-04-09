@@ -35,9 +35,6 @@ from planner.Frenet.utils.helper_functions import (
 from planner.utils.timers import ExecTimer
 from prediction.utils.visualization import draw_uncertain_predictions
 
-i = 0
-
-
 def animate_scenario(
     scenario: Scenario,
     fps: int = 30,
@@ -467,7 +464,8 @@ def draw_frenet_trajectories(
         print(f"valid_traj: {len(valid_traj)}")
         # plot all valid trajectories
         for p in reversed(valid_traj):
-            color = mapper.to_rgba(p['cost'])
+            # color = mapper.to_rgba(p['cost'])
+            color = 'grey'
             if len(p) == 2:
                 # This means we have only a single plan along the horizon
                 shared_plan = p['shared_plan']
@@ -502,7 +500,7 @@ def draw_frenet_trajectories(
                 shared_plan.x,
                 shared_plan.y,
                 alpha=0.4,
-                color=(0.4, 0.4, 0.4),
+                color="grey",
                 zorder=25,
                 picker=picker,
             )
@@ -513,7 +511,7 @@ def draw_frenet_trajectories(
                         ft_contingent.x,
                         ft_contingent.y,
                         alpha=0.4,
-                        color=(0.7, 0.7, 0.7),
+                        color="grey",
                         zorder=25,
                         picker=picker,
                     )
@@ -521,7 +519,7 @@ def draw_frenet_trajectories(
     
     # draw predictions
     if predictions is not None:
-        pass
+        # pass
         draw_uncertain_predictions(predictions, ax, mode_num)
 
     # Save the figure

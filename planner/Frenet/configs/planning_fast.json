@@ -8,12 +8,12 @@
     "mode": "risk",
     "frenet_parameters": {
       "t_list": [8.0],
-      "con_t_list": [6.0],
+      "con_t_list": [5.0],
       "contingency": false,
       "v_list_generation_mode": "linspace",
       "n_v_samples": 5,
       "d_list": {
-        "d_max_abs": 2.5,
+        "d_max_abs": 1.5,
         "n": 5
       },
       "dt": 0.1,

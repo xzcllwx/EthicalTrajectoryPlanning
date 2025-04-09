@@ -157,30 +157,8 @@ class Planner(object):
                         np.diff(prediction_obj[0, :])**2 + np.diff(prediction_obj[1, :])**2
                     ) / dt).tolist()
                     self.__prediction[i][j]['v_list'].append(self.__prediction[i][j]['v_list'][-1])
-                    
-                    # self.__prediction[i][0]['v_list'] = [
-                    #     np.linalg.norm(
-                    #         np.array([prediction_obj[idx,0] - prediction_obj[idx - 1,0], 
-                    #                   prediction_obj[idx,1] - prediction_obj[idx - 1,1]])
-                    #     ) / 0.1 if idx > 0 else 0.0
-                    #     for idx in range(len(prediction_obj))
-                    # ]
-                    # self.__prediction[i][0]['v_list'][0] = self.__prediction[i][0]['v_list'][1]
-                    # self.__prediction[i][0]['orientation_list'] = [
-                    #     np.arctan2(p[1] - prediction_obj[idx - 1,1], p[0] - prediction_obj[idx - 1,0])
-                    #     if idx > 0 else 0.0
-                    #     for idx, p in enumerate(prediction_obj)
-                    # ]
-
-                    # self.__prediction[i][0]['orientation_list'][0] = self.__prediction[i][0]['orientation_list'][1]
-
                     self.__prediction[i][j]['cov_list'] = cov_obj
-                    # self.__prediction[i][0]['cov_list'] = np.array(
-                    #     [[[p[0][0], p[0][1]], [p[1][0], p[1][1]]] for p in cov_obj]
-                    # ).reshape(-1, 2, 2)
-                    # self.__prediction[i][0]['cov_list'] = np.array(
-                    #     [[[p[2]*p[2], p[2]*p[3]*p[4]], [p[2]*p[3]*p[4], p[3]*p[3]]] for p in prediction_obj]
-                    # ).reshape(-1, 2, 2)
+
 
 
         # TODO: Include maximum allowed speed

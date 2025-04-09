@@ -123,22 +123,23 @@ def calc_risk(
             obst_harm_max[key] = max(max(row) for row in obst_harm_traj_list)
             obst_risk_max[key] = max(max(row) for row in obst_risk_traj_list)
         else:
+            mode_idx_2 = 0
             ego_risk_traj = {}
             obst_risk_traj = {}
             ego_risk_traj[key] = [
-                ego_harm_traj[key][mode_idx][t] * coll_prob_dict[key][mode_idx][t]
-                    for t in range(len(ego_harm_traj[key][mode_idx]))
+                ego_harm_traj[key][mode_idx_2][t] * coll_prob_dict[key][mode_idx_2][t]
+                    for t in range(len(ego_harm_traj[key][mode_idx_2]))
             ]
             obst_risk_traj[key] = [
-                obst_harm_traj[key][mode_idx][t] * coll_prob_dict[key][mode_idx][t]
-                for t in range(len(obst_harm_traj[key][mode_idx]))
+                obst_harm_traj[key][mode_idx_2][t] * coll_prob_dict[key][mode_idx_2][t]
+                for t in range(len(obst_harm_traj[key][mode_idx_2]))
             ]
             # 可以加上时间系数，作为约束而言，加上时间系数不太合适
             # Take max as representative for the whole trajectory
             ego_risk_max[key] = max(ego_risk_traj[key])
             obst_risk_max[key] = max(obst_risk_traj[key])
-            ego_harm_max[key] = max(ego_harm_traj[key][mode_idx])
-            obst_harm_max[key] = max(obst_harm_traj[key][mode_idx])
+            ego_harm_max[key] = max(ego_harm_traj[key][mode_idx_2])
+            obst_harm_max[key] = max(obst_harm_traj[key][mode_idx_2])
 
     # 静态障碍物不需要考虑模态
     if road_boundary is not None:

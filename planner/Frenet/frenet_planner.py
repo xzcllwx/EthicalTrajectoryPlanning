@@ -290,7 +290,8 @@ class FrenetPlanner(Planner):
         ref_vector = np.array([ref_point[0] - self.ego_state.position[0], ref_point[1] - self.ego_state.position[1]])
         tangent_vector = np.array([math.cos(ref_yaw), math.sin(ref_yaw)])
         cross_product = np.cross(tangent_vector, ref_vector)
-        current_d = math.sqrt(current_d_square) if cross_product >= 0 else -math.sqrt(current_d_square)
+        current_d = math.sqrt(current_d_square)
+        current_d = -current_d if cross_product >= 0 else current_d
 
         # find position along the reference spline (s, s_d, s_dd, d, d_d, d_dd)
         c_s = current_s
@@ -303,13 +304,15 @@ class FrenetPlanner(Planner):
         # get the end velocities for the frenét paths
         current_v = self.ego_state.velocity
         max_acceleration = self.p.longitudinal.a_max
+        max_deceleration = self.p.longitudinal.d_max
         t_min = min(self.frenet_parameters["t_list"])
         t_max = max(self.frenet_parameters["t_list"])
         max_v = min(
-            current_v + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
+            current_v + (max_acceleration) * t_max, self.p.longitudinal.v_max
         )
-        min_v = max(0.01, current_v - max_acceleration * t_min)
-
+        max_v = min(max_v, self.v_max)
+        min_v = max(0.01, current_v - max_deceleration * t_min)
+        print(f"min_v: {min_v}, max_v: {max_v}")
         with self.exec_timer.time_with_cm("simulation/get v list"):
             v_list = get_v_list(
                 v_min=min_v,
@@ -399,12 +402,12 @@ class FrenetPlanner(Planner):
                 d_list = self.frenet_parameters["d_list"]
                 t_list = self.frenet_parameters["con_t_list"]
                 print(f"contingency_t_list: {t_list}")
+                start_idx = int(max(self.frenet_parameters["t_list"]) / self.frenet_parameters["dt"])
+                print(f"start_idx: {start_idx}")
                 t_min = min(t_list)
                 t_max = max(t_list)
-
                 ft_final_list = []
                 ft_all_plans_list = []
-
                 for plan in ft_list_valid:
                     final_plan = {}
                     ft_all_plans = {}
@@ -412,8 +415,9 @@ class FrenetPlanner(Planner):
                     max_v = min(
                         plan.v[-1] + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
                     )
-                    min_v = max(0.01, plan.v[-1] - max_acceleration * t_min)
-
+                    max_v = min(max_v, self.v_max)
+                    min_v = max(0.01, plan.v[-1] - max_deceleration * t_min)
+                    
                     # with self.exec_timer.time_with_cm("simulation/get v list"):
                     v_list = get_v_list(
                         v_min=min_v,
@@ -424,6 +428,8 @@ class FrenetPlanner(Planner):
                         mode=self.frenet_parameters["v_list_generation_mode"],
                         n_samples=self.frenet_parameters["n_v_samples"],
                     )
+                    # print(f"v_list: {v_list}")
+                    # print(f"d_list: {d_list}")
 
                     final_plan['shared_plan'] = plan
                     ft_all_plans['shared_plan'] = plan
@@ -467,7 +473,7 @@ class FrenetPlanner(Planner):
                                 goal_area=self.goal_area,
                                 exec_timer=self.exec_timer,
                                 reach_set=(self.reach_set if self.responsibility else None),
-                                start_idx=int(max(self.frenet_parameters["t_list"]) / self.frenet_parameters["dt"]),
+                                start_idx=start_idx,
                                 mode_idx=mode_idx,
                                 mode_num=mode_num,
                                 belief=branch_w
@@ -478,7 +484,7 @@ class FrenetPlanner(Planner):
                             if len(ft_contingent_list_valid) == 0:
                                 continue
                             ft_contingent_list_valid.sort(key=lambda fp: fp.cost, reverse=False)
-                            final_plan[mode_idx] = ft_contingent_list_valid[0]
+                            final_plan[mode_idx] = copy.deepcopy(ft_contingent_list_valid[0])
                             # 如果没有有效路径，直接返回
                     if len(final_plan) == 1 and self.frenet_parameters["contingency"]:
                         print("Failed. No valid frenét path found")
@@ -558,18 +564,16 @@ class FrenetPlanner(Planner):
                     )
 
             # print some information about the frenet trajectories
-            # if self.plot_frenet_trajectories:
-            if True:
-                matplotlib.use("TKAgg")
-                print(
-                    "Time step: {} | Velocity: {:.2f} km/h | Acceleration: {:.2f} m/s2".format(
-                        self.time_step, current_v * 3.6, c_s_dd
-                    )
+            print(
+                "Time step: {} | Velocity: {:.2f} km/h | Acceleration: {:.2f} m/s2".format(
+                    self.time_step, self.ego_state.velocity * 3.6, self.ego_state.acceleration
                 )
-                for lvl, descr in VALIDITY_LEVELS.items():
-                    print(f"{descr}: {len(validity_dict[lvl])}", end=" | ")
-                print("")
-
+            )
+            for lvl, descr in VALIDITY_LEVELS.items():
+                print(f"{descr}: {len(validity_dict[lvl])}", end=" | ")
+            print("")
+            if self.plot_frenet_trajectories:
+                matplotlib.use("TKAgg")
                 try:
                     draw_frenet_trajectories(
                         scenario=copy.deepcopy(self.scenario),
@@ -596,9 +600,16 @@ class FrenetPlanner(Planner):
                 print("Success. Valid frenét path found")
                 best_trajectory = ft_final_list[0]['shared_plan']
                 if self.frenet_parameters["contingency"]:
-                    best_contingency_plan = ft_final_list[0][0]
+                    best_index = np.argmax(branch_w)
+                    best_contingency_plan = ft_final_list[0][best_index]
+                    remain_index = [i for i in range(mode_num) if i != best_index]
+                    other_contingency_plan = None
+                    if len(remain_index) > 0:
+                        print(f"best_index: {best_index}, remain_index: {remain_index[0]}")
+                        other_contingency_plan = ft_final_list[0][remain_index[0]]
                 else:
                     best_contingency_plan = None
+                    other_contingency_plan = None
             else:
                 # best_trajectory = ft_list_invalid[0]
                 # raise NoLocalTrajectoryFoundError('Failed. No valid frenét path found')
@@ -641,7 +652,15 @@ class FrenetPlanner(Planner):
             plan[len(best_trajectory.v):, 2] = best_contingency_plan.v
             plan[len(best_trajectory.yaw):, 3] = best_contingency_plan.yaw
         
-        return plan
+        other_plan = None
+        if other_contingency_plan is not None:
+            other_plan = np.zeros((len(other_contingency_plan.x), 4))
+            other_plan[:, 0] = other_contingency_plan.x
+            other_plan[:, 1] = other_contingency_plan.y
+            other_plan[:, 2] = other_contingency_plan.v
+            other_plan[:, 3] = other_contingency_plan.yaw
+        
+        return plan, other_plan
 
 
 if __name__ == "__main__":
