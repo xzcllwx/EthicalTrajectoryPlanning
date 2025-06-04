@@ -405,6 +405,7 @@ def draw_frenet_trajectories(
     live=True,
     mode_num=1,
     is_contingency=False,
+    ref_traj=None,
 ):
     """
     Plot all frenét trajectories.
@@ -488,6 +489,9 @@ def draw_frenet_trajectories(
             for idx in range(mode_num):
                 ft_contingent = best_traj[idx]
                 ax.plot(ft_contingent.x, ft_contingent.y, alpha=1.0, color="blue", zorder=32, lw=3.0, label="Best contin trajectory", picker=picker)
+    if ref_traj is not None:
+        print("plot ref_traj")
+        ax.plot(ref_traj[:,0], ref_traj[:,1], alpha=1.0, color="red", zorder=32, lw=3.0, label="ref trajectory", picker=picker)
         
     # Draw all possible trajectories with their costs as colors
     print(f"all_traj: {len(all_traj)}")

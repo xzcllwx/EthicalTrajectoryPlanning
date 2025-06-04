@@ -63,14 +63,14 @@ class VehicleParameters:
     def parameterize_bmw_320i(self):
         """Simplified parameter set of vehicle 2 (BMW 320i)."""
         # vehicle body dimensions
-        self.l = 5.176  # vehicle length [m] (with US bumpers)
+        self.l = 4.5  # vehicle length [m] (with US bumpers)
         self.l_f = (
-            1.42
+            1.325
         )  # length from the center of gravity to the front axle [m]
         self.l_r = (
-            1.67
+            1.325
         )  # length from the center of gravity to the rear axle [m]
-        self.w = 2.3  # vehicle width [m]
+        self.w = 1.9  # vehicle width [m]
 
         # vehicle mass
         self.m = 1475  # vehicle mass [kg]
@@ -83,13 +83,13 @@ class VehicleParameters:
 
         # longitudinal constraints
         self.longitudinal.v_min = -1.0  # minimum velocity [m/s]
-        self.longitudinal.v_max = 30.0  # maximum velocity [m/s]
+        self.longitudinal.v_max = 9.0  # maximum velocity [m/s]
         self.longitudinal.v_switch = 7.319  # switching velocity [m/s]
-        self.longitudinal.a_max = 5  # maximum absolute acceleration [m/s^2]
-        self.longitudinal.d_max = 8
+        self.longitudinal.a_max = 3  # maximum absolute acceleration [m/s^2]
+        self.longitudinal.d_max = 5
 
         # lateral acceleration
-        self.lateral_a_max = 5.0  # maximum lateral acceleartion [m/s^2]
+        self.lateral_a_max = 3.0  # maximum lateral acceleartion [m/s^2]
 
     def parameterize_vw_vanagon(self):
         """Simplified parameter set of vehicle 3 (VW Vanagon)."""

@@ -96,6 +96,7 @@ class Planner(object):
         
         # belief
         self.__belief = None
+        self.__ref_traj = None
         
     def init_global_path(self, ref_path):
         if self.__reference_spline is None: # 只初始化一次
@@ -115,6 +116,7 @@ class Planner(object):
         cov = None,
         belief=None,
         v_max=50,
+        ref_traj=None,
     ):
         """Main Step Function of the Planner
 
@@ -134,7 +136,8 @@ class Planner(object):
         self.__time_step = time_step
         self.__ego_state = ego_state
         self.__belief = belief
-           
+        self.__ref_traj = ref_traj
+    
         self._update_scenario(ego_state, predictions[:, 0, :, :])
         self.__prediction = {}
         dt = 0.1
@@ -331,7 +334,23 @@ class Planner(object):
     def belief(self):
         """Belief"""
         return self.__belief
+    
+    @property
+    def ref_traj(self):
+        """Reference trajectory"""
+        return self.__ref_traj
 
+    def proj_on_ref_path(self, position):
+        current_s, current_d_square = self.reference_spline.get_min_arc_length(position)
+
+        ref_point = self.reference_spline.calc_position(current_s)
+        ref_yaw = self.reference_spline.calc_yaw(current_s)
+        ref_vector = np.array([ref_point[0] - self.ego_state.position[0], ref_point[1] - self.ego_state.position[1]])
+        tangent_vector = np.array([math.cos(ref_yaw), math.sin(ref_yaw)])
+        cross_product = np.cross(tangent_vector, ref_vector)
+        current_d = math.sqrt(current_d_square)
+        current_d = -current_d if cross_product >= 0 else current_d
+        return current_s, current_d
 
 # TODO move to separate file
 def check_curvature_of_global_path(

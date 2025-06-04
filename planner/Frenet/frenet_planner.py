@@ -301,6 +301,34 @@ class FrenetPlanner(Planner):
         c_d_d = self.trajectory["d_d_loc_mps"][1]
         c_d_dd = self.trajectory["d_dd_loc_mps2"][1]
 
+        ref_d = None
+        ref_vel = None
+        # get ref_traj
+        if self.ref_traj is not None:
+            ref_point = [self.ref_traj[-1, 0], self.ref_traj[-1, 1]]
+            ref_vel = self.ref_traj[-1, 3]
+            ref_s, ref_d = self.proj_on_ref_path(ref_point)
+            if ref_s > self.reference_spline.s[-1] - 1.0:
+                print("out of range")
+                ref_s = self.reference_spline.s[-1] - 1.0
+                traj_s = ref_s - c_s
+                traj_s = max(traj_s, 0.0)
+                cum_s = 0
+                for i in range(1, len(self.ref_traj)):
+                    cum_s += np.linalg.norm(
+                        np.array([self.ref_traj[i, 0] - self.ref_traj[i - 1, 0], self.ref_traj[i, 1] - self.ref_traj[i - 1, 1]])
+                    )
+                    if cum_s >= traj_s:
+                        print(f"index: {i}")
+                        ref_point = [self.ref_traj[i-1, 0], self.ref_traj[i-1, 1]]
+                        ref_vel = self.ref_traj[i-1, 3]
+                        ref_s, ref_d = self.proj_on_ref_path(ref_point)
+                        break
+                
+            print(f"ref_s: {ref_s}")
+            print(f"ref_d: {ref_d}")
+            print(f"ref_vel: {ref_vel}")
+
         # get the end velocities for the frenét paths
         current_v = self.ego_state.velocity
         max_acceleration = self.p.longitudinal.a_max
@@ -312,12 +340,16 @@ class FrenetPlanner(Planner):
         )
         max_v = min(max_v, self.v_max)
         min_v = max(0.01, current_v - max_deceleration * t_min)
+        mid_v = current_v
+        if self.ref_traj is not None:
+            if ref_vel > min_v and ref_vel < max_v:
+                mid_v = ref_vel 
         print(f"min_v: {min_v}, max_v: {max_v}")
         with self.exec_timer.time_with_cm("simulation/get v list"):
             v_list = get_v_list(
                 v_min=min_v,
                 v_max=max_v,
-                v_cur=current_v,
+                v_cur=mid_v,
                 v_goal_min=self.v_goal_min,
                 v_goal_max=self.v_goal_max,
                 mode=self.frenet_parameters["v_list_generation_mode"],
@@ -326,8 +358,13 @@ class FrenetPlanner(Planner):
 
         with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
             d_list = self.frenet_parameters["d_list"]
+            if self.ref_traj is not None:
+                d_list = np.linspace(ref_d - 2.5, ref_d + 2.5, 5)
+            
             t_list = self.frenet_parameters["t_list"]
             print(f"t_list: {t_list}")
+            print(f"v_list: {v_list}")
+            print(f"d_list: {d_list}")
             # calculate all possible frenét trajectories
             ft_list = calc_frenet_trajectories(
                 c_s=c_s,
@@ -400,6 +437,8 @@ class FrenetPlanner(Planner):
             # min_v = max(0.01, current_v - max_acceleration * t_min)
             with self.exec_timer.time_with_cm("simulation/calculate trajectories/total"):
                 d_list = self.frenet_parameters["d_list"]
+                if self.ref_traj is not None:
+                    d_list = np.linspace(ref_d - 2.5, ref_d + 2.5, 5)
                 t_list = self.frenet_parameters["con_t_list"]
                 print(f"contingency_t_list: {t_list}")
                 start_idx = int(max(self.frenet_parameters["t_list"]) / self.frenet_parameters["dt"])
@@ -411,18 +450,21 @@ class FrenetPlanner(Planner):
                 for plan in ft_list_valid:
                     final_plan = {}
                     ft_all_plans = {}
-                    current_v = plan.v[-1]
+                    mid_v = plan.v[-1]
                     max_v = min(
                         plan.v[-1] + (max_acceleration / 2.0) * t_max, self.p.longitudinal.v_max
                     )
                     max_v = min(max_v, self.v_max)
                     min_v = max(0.01, plan.v[-1] - max_deceleration * t_min)
+                    if self.ref_traj is not None:
+                        if ref_vel > min_v and ref_vel < max_v:
+                            mid_v = ref_vel
                     
                     # with self.exec_timer.time_with_cm("simulation/get v list"):
                     v_list = get_v_list(
                         v_min=min_v,
                         v_max=max_v,
-                        v_cur=current_v,
+                        v_cur=mid_v,
                         v_goal_min=self.v_goal_min,
                         v_goal_max=self.v_goal_max,
                         mode=self.frenet_parameters["v_list_generation_mode"],
@@ -573,7 +615,8 @@ class FrenetPlanner(Planner):
                 print(f"{descr}: {len(validity_dict[lvl])}", end=" | ")
             print("")
             if self.plot_frenet_trajectories:
-                matplotlib.use("TKAgg")
+                # matplotlib.use("TKAgg")
+                matplotlib.use("Agg")
                 try:
                     draw_frenet_trajectories(
                         scenario=copy.deepcopy(self.scenario),
@@ -591,6 +634,7 @@ class FrenetPlanner(Planner):
                         mode_num=mode_num,
                         show_label=True,
                         is_contingency=self.frenet_parameters["contingency"],
+                        ref_traj=self.ref_traj,
                     )
                 except Exception as e:
                     print(e)
